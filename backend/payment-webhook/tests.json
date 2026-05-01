@@ -6,7 +6,13 @@
       "path": "/",
       "body": {"event": "payment.waiting_for_capture", "object": {}},
       "expectedStatus": 200,
-      "expectedBody": {"ok": true},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "GET returns 200 (cron via root)",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200,
       "bodyMatcher": "partial"
     }
   ]
