@@ -1,0 +1,19 @@
+{
+  "tests": [
+    {
+      "name": "Create payment without auth",
+      "method": "POST",
+      "path": "/",
+      "body": {"amount": 500, "method": "card"},
+      "expectedStatus": 401,
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "OPTIONS preflight",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200,
+      "bodyMatcher": "partial"
+    }
+  ]
+}

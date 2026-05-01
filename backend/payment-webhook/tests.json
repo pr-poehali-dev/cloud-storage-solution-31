@@ -1,0 +1,13 @@
+{
+  "tests": [
+    {
+      "name": "Webhook ping (unknown event)",
+      "method": "POST",
+      "path": "/",
+      "body": {"event": "payment.waiting_for_capture", "object": {}},
+      "expectedStatus": 200,
+      "expectedBody": {"ok": true},
+      "bodyMatcher": "partial"
+    }
+  ]
+}

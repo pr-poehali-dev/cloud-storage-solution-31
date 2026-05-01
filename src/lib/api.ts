@@ -3,6 +3,7 @@ import func2url from '../../backend/func2url.json'
 const REGISTER_URL = (func2url as Record<string, string>)['auth-register']
 const LOGIN_URL = (func2url as Record<string, string>)['auth-login']
 const PROFILE_URL = (func2url as Record<string, string>)['auth-profile']
+const PAYMENT_CREATE_URL = (func2url as Record<string, string>)['payment-create']
 
 function getSession(): string {
   return localStorage.getItem('session_id') || ''
@@ -29,6 +30,13 @@ export async function apiLogin(data: { email: string; password: string }) {
 export async function apiLogout() {
   await fetch(LOGIN_URL + '/logout', { method: 'POST', headers: authHeaders() })
   localStorage.removeItem('session_id')
+}
+
+export async function apiCreatePayment(data: { amount: number; method: 'card' | 'sbp'; return_url: string }) {
+  const res = await fetch(PAYMENT_CREATE_URL, { method: 'POST', headers: authHeaders(), body: JSON.stringify(data) })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || 'Ошибка создания платежа')
+  return json as { payment_id: string; confirmation_url: string }
 }
 
 export async function apiProfile() {
