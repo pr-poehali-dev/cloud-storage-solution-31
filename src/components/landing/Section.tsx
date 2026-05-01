@@ -1,5 +1,6 @@
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
+import { Link } from "react-router-dom"
 import type { SectionProps } from "@/types"
 
 export default function Section({ id, title, subtitle, content, isActive, showButton, buttonText }: SectionProps) {
@@ -15,14 +16,16 @@ export default function Section({ id, title, subtitle, content, isActive, showBu
           {subtitle}
         </motion.div>
       )}
-      <motion.h2
-        className="text-4xl md:text-6xl lg:text-[5rem] xl:text-[6rem] font-bold leading-[1.1] tracking-tight max-w-4xl text-white"
-        initial={{ opacity: 0, y: 50 }}
-        animate={isActive ? { opacity: 1, y: 0 } : {}}
-        transition={{ duration: 0.5 }}
-      >
-        {title}
-      </motion.h2>
+      {title && (
+        <motion.h2
+          className="text-4xl md:text-6xl lg:text-[5rem] xl:text-[6rem] font-bold leading-[1.1] tracking-tight max-w-4xl text-white"
+          initial={{ opacity: 0, y: 50 }}
+          animate={isActive ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.5 }}
+        >
+          {title}
+        </motion.h2>
+      )}
       {content && (
         <motion.p
           className="text-lg md:text-xl lg:text-2xl max-w-2xl mt-6 text-neutral-400"
@@ -38,14 +41,23 @@ export default function Section({ id, title, subtitle, content, isActive, showBu
           initial={{ opacity: 0, y: 20 }}
           animate={isActive ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.5, delay: 0.4 }}
-          className="mt-12 md:mt-16"
+          className="mt-12 md:mt-16 flex gap-4"
         >
           <Button
+            asChild
             variant="outline"
             size="lg"
             className="text-[#FF4D00] bg-transparent border-[#FF4D00] hover:bg-[#FF4D00] hover:text-black transition-colors"
           >
-            {buttonText}
+            <Link to="/register">{buttonText}</Link>
+          </Button>
+          <Button
+            asChild
+            variant="ghost"
+            size="lg"
+            className="text-neutral-400 hover:text-white transition-colors"
+          >
+            <Link to="/login">Войти</Link>
           </Button>
         </motion.div>
       )}

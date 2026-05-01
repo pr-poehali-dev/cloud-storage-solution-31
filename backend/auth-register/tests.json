@@ -1,0 +1,21 @@
+{
+  "tests": [
+    {
+      "name": "Register new user successfully",
+      "method": "POST",
+      "path": "/",
+      "body": {"name": "Тест Юзер", "email": "autotest_reg_001@example.com", "password": "password123"},
+      "expectedStatus": 200,
+      "expectedBody": {"session_id": "string", "referral_code": "string"},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Register with missing fields",
+      "method": "POST",
+      "path": "/",
+      "body": {"email": "nope@example.com"},
+      "expectedStatus": 400,
+      "bodyMatcher": "partial"
+    }
+  ]
+}
