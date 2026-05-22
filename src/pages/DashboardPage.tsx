@@ -71,19 +71,7 @@ export default function DashboardPage() {
 
   // Текущее значение — всегда вычисляется из якоря, не из state
   const liveDividends = calcNow()
-  void tick // используем tick чтобы обновлялся каждую секунду
-
-  const handleLogout = async () => {
-    await logout()
-    navigate('/')
-  }
-
-  const copyRefLink = () => {
-    if (!user) return
-    navigator.clipboard.writeText(`${window.location.origin}/register?ref=${user.referral_code}`)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+  void tick
 
   // Показываем счётчик из localStorage сразу, не ждём загрузки профиля
   const balance = liveDividends + (user?.referral_total ?? 0)
