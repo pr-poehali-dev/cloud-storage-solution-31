@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -10,10 +10,9 @@ const WEEKLY_SECONDS = 7 * 24 * 3600
 
 function getWeekStart(): Date {
   const now = new Date()
-  const day = now.getUTCDay() // 0=Sun
-  const diff = (day === 0 ? 6 : day - 1) // Mon=0
-  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff))
-  return monday
+  const day = now.getUTCDay()
+  const diff = day === 0 ? 6 : day - 1
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff))
 }
 
 export default function DashboardPage() {
@@ -21,6 +20,7 @@ export default function DashboardPage() {
   const navigate = useNavigate()
   const [liveDividends, setLiveDividends] = useState(0)
   const [copied, setCopied] = useState(false)
+  const startedRef = useRef(false)
 
   useEffect(() => {
     if (!loading && !user) navigate('/login')
@@ -28,13 +28,15 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!user) return
+    // Запускаем счётчик только один раз при первой загрузке данных
+    if (startedRef.current) return
+    startedRef.current = true
+
     const weeklyRate = (user.deposit * user.rate) / 100
     const perSecond = weeklyRate / WEEKLY_SECONDS
 
-    // Сколько секунд прошло с начала текущей недели
-    const weekStart = getWeekStart()
-    const secondsElapsed = (Date.now() - weekStart.getTime()) / 1000
-    // Накопленное за эту неделю (не зачислено в БД ещё)
+    // Считаем сколько уже накопилось с начала недели (непрерывно, без сброса)
+    const secondsElapsed = (Date.now() - getWeekStart().getTime()) / 1000
     const accruedThisWeek = perSecond * secondsElapsed
 
     setLiveDividends(user.dividends_total + accruedThisWeek)
