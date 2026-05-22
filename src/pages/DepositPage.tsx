@@ -7,14 +7,14 @@ import { Label } from '@/components/ui/label'
 import Icon from '@/components/ui/icon'
 import { useAuth } from '@/context/AuthContext'
 import { apiCreatePayment } from '@/lib/api'
-import Layout from '@/components/landing/Layout'
+import PageLayout from '@/components/landing/PageLayout'
 
 const QUICK_AMOUNTS = [500, 1000, 5000, 10000, 50000]
 
 const CRYPTO_WALLETS = [
-  { name: 'USDT TRC20', icon: '💚', address: 'TYourUSDTTRC20WalletAddressHere' },
-  { name: 'Bitcoin', icon: '🟠', address: '1YourBitcoinWalletAddressHere' },
-  { name: 'Ethereum', icon: '🔵', address: '0xYourEthereumWalletAddressHere' },
+  { name: 'USDT TRC20', color: 'text-green-400', bg: 'bg-green-500/10 border-green-500/20', address: 'TYourUSDTTRC20WalletAddressHere' },
+  { name: 'Bitcoin', color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/20', address: '1YourBitcoinWalletAddressHere' },
+  { name: 'Ethereum', color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20', address: '0xYourEthereumWalletAddressHere' },
 ]
 
 type Tab = 'card' | 'sbp' | 'crypto'
@@ -54,40 +54,50 @@ export default function DepositPage() {
     setTimeout(() => setCopiedWallet(null), 2000)
   }
 
-  const tabs: { key: Tab; label: string; icon: string }[] = [
-    { key: 'card', label: 'Карта', icon: 'CreditCard' },
-    { key: 'sbp', label: 'СБП', icon: 'Zap' },
-    { key: 'crypto', label: 'Крипто', icon: 'Bitcoin' },
+  const tabs: { key: Tab; label: string; icon: string; desc: string }[] = [
+    { key: 'card', label: 'Банковская карта', icon: 'CreditCard', desc: 'Visa, МИР, Mastercard' },
+    { key: 'sbp', label: 'СБП', icon: 'Zap', desc: 'Мгновенно, без комиссии' },
+    { key: 'crypto', label: 'Криптовалюта', icon: 'Bitcoin', desc: 'USDT, BTC, ETH' },
   ]
 
   if (loading || !user) {
-    return <Layout><div className="h-full flex items-center justify-center"><p className="text-neutral-400">Загрузка...</p></div></Layout>
+    return (
+      <PageLayout>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-[#FF4D00] border-t-transparent rounded-full animate-spin" />
+        </div>
+      </PageLayout>
+    )
   }
 
   return (
-    <Layout>
-      <div className="h-full overflow-y-auto">
-        <div className="max-w-lg mx-auto p-6 md:p-10">
+    <PageLayout imgIndex={1}>
+      <div className="min-h-screen overflow-y-auto">
+        <div className="max-w-xl mx-auto p-5 md:p-8">
+
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-            <Link to="/dashboard" className="text-neutral-500 hover:text-neutral-300 text-sm flex items-center gap-1 mb-6">
+            <Link to="/dashboard" className="text-neutral-500 hover:text-neutral-300 text-sm flex items-center gap-1.5 mb-6 transition-colors">
               <Icon name="ArrowLeft" size={14} /> Назад в кабинет
             </Link>
-            <h1 className="text-3xl md:text-4xl font-bold text-white">Пополнение депозита</h1>
-            <p className="text-neutral-400 mt-1">Текущий депозит: <span className="text-white">{user.deposit.toLocaleString('ru-RU')} ₽</span></p>
+            <h1 className="text-3xl md:text-4xl font-bold text-white">Пополнение</h1>
+            <p className="text-neutral-400 mt-1 text-sm">
+              Текущий депозит: <span className="text-white font-medium">{user.deposit.toLocaleString('ru-RU')} ₽</span>
+            </p>
           </motion.div>
 
           {/* Tabs */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-            className="flex gap-2 mb-6">
+            className="grid grid-cols-3 gap-2 mb-6">
             {tabs.map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl text-xs font-medium transition-all ${
                   tab === t.key
-                    ? 'bg-[#FF4D00] text-white'
+                    ? 'bg-[#FF4D00] text-white shadow-lg shadow-orange-900/30'
                     : 'bg-white/5 text-neutral-400 hover:bg-white/10 border border-white/10'
                 }`}>
-                <Icon name={t.icon as Parameters<typeof Icon>[0]['name']} size={15} />
-                {t.label}
+                <Icon name={t.icon as Parameters<typeof Icon>[0]['name']} size={18} />
+                <span className="font-semibold">{t.label}</span>
+                <span className={`text-xs ${tab === t.key ? 'text-orange-200' : 'text-neutral-600'}`}>{t.desc}</span>
               </button>
             ))}
           </motion.div>
@@ -96,14 +106,22 @@ export default function DepositPage() {
           {(tab === 'card' || tab === 'sbp') && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
               className="bg-white/5 border border-white/10 rounded-2xl p-6">
-              <Label className="text-neutral-300 mb-3 block">Сумма пополнения (₽)</Label>
+
+              {tab === 'sbp' && (
+                <div className="flex items-center gap-2 mb-5 p-3 rounded-xl bg-green-500/10 border border-green-500/20">
+                  <Icon name="Zap" size={15} className="text-green-400 shrink-0" />
+                  <p className="text-green-400 text-sm">Мгновенно, без комиссии</p>
+                </div>
+              )}
+
+              <Label className="text-neutral-300 mb-3 block text-sm">Сумма пополнения</Label>
               <div className="flex flex-wrap gap-2 mb-4">
                 {QUICK_AMOUNTS.map(q => (
                   <button key={q} onClick={() => setAmount(String(q))}
-                    className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
+                    className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-all ${
                       amount === String(q)
-                        ? 'bg-[#FF4D00] text-white'
-                        : 'bg-white/5 border border-white/10 text-neutral-400 hover:border-[#FF4D00]/50'
+                        ? 'bg-[#FF4D00] text-white shadow-md shadow-orange-900/30'
+                        : 'bg-white/5 border border-white/10 text-neutral-400 hover:border-[#FF4D00]/40 hover:text-white'
                     }`}>
                     {q.toLocaleString('ru-RU')} ₽
                   </button>
@@ -112,25 +130,26 @@ export default function DepositPage() {
               <Input
                 type="number" value={amount} onChange={e => setAmount(e.target.value)}
                 min={100} placeholder="Введите сумму"
-                className="bg-white/5 border-white/20 text-white placeholder:text-neutral-600 focus:border-[#FF4D00] mb-4"
+                className="bg-white/5 border-white/20 text-white placeholder:text-neutral-600 focus:border-[#FF4D00] mb-5 h-12 text-lg"
               />
 
-              {tab === 'sbp' && (
-                <div className="flex items-center gap-2 mb-4 p-3 rounded-xl bg-green-500/10 border border-green-500/20">
-                  <Icon name="Zap" size={16} className="text-green-400" />
-                  <p className="text-green-400 text-sm">Оплата через СБП — мгновенно, без комиссии</p>
+              {error && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 mb-4">
+                  <Icon name="AlertCircle" size={14} className="text-red-400 shrink-0" />
+                  <p className="text-red-400 text-sm">{error}</p>
                 </div>
               )}
 
-              {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
-
               <Button onClick={handlePay} disabled={paying} size="lg"
-                className="w-full bg-[#FF4D00] hover:bg-[#e64500] text-white border-0">
-                {paying ? 'Переходим к оплате...' : `Оплатить ${parseFloat(amount || '0').toLocaleString('ru-RU')} ₽`}
+                className="w-full bg-[#FF4D00] hover:bg-[#e64500] text-white border-0 h-12 text-base">
+                {paying ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Переходим к оплате...
+                  </span>
+                ) : `Оплатить ${parseFloat(amount || '0').toLocaleString('ru-RU')} ₽`}
               </Button>
-              <p className="text-neutral-600 text-xs mt-3 text-center">
-                Вы будете перенаправлены на страницу ЮKassa
-              </p>
+              <p className="text-neutral-600 text-xs mt-3 text-center">Перенаправление на страницу ЮKassa</p>
             </motion.div>
           )}
 
@@ -138,24 +157,21 @@ export default function DepositPage() {
           {tab === 'crypto' && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
               className="space-y-3">
-              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 flex gap-2">
+              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 flex gap-3">
                 <Icon name="AlertTriangle" size={16} className="text-yellow-400 shrink-0 mt-0.5" />
-                <p className="text-yellow-400 text-sm">После оплаты отправьте скриншот в поддержку. Депозит будет зачислен вручную в течение 24 часов.</p>
+                <p className="text-yellow-400 text-sm">После оплаты отправьте скриншот в поддержку. Депозит зачисляется вручную в течение 24 часов.</p>
               </div>
               {CRYPTO_WALLETS.map(wallet => (
-                <div key={wallet.name} className="bg-white/5 border border-white/10 rounded-2xl p-5">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-xl">{wallet.icon}</span>
-                    <p className="text-white font-semibold">{wallet.name}</p>
-                  </div>
+                <div key={wallet.name} className={`${wallet.bg} border rounded-2xl p-5`}>
+                  <p className={`font-semibold mb-3 ${wallet.color}`}>{wallet.name}</p>
                   <div className="flex gap-2">
-                    <code className="flex-1 bg-black/30 rounded-lg px-3 py-2 text-neutral-300 text-xs break-all">
+                    <code className="flex-1 bg-black/40 rounded-xl px-3 py-2.5 text-neutral-300 text-xs break-all border border-white/5">
                       {wallet.address}
                     </code>
                     <Button variant="outline" size="sm" onClick={() => copyAddress(wallet.address)}
-                      className="border-white/20 text-white bg-transparent hover:bg-white/10 shrink-0">
+                      className="border-white/20 text-white bg-white/5 hover:bg-white/10 shrink-0 h-auto px-3">
                       {copiedWallet === wallet.address
-                        ? <Icon name="Check" size={14} />
+                        ? <Icon name="Check" size={14} className="text-green-400" />
                         : <Icon name="Copy" size={14} />}
                     </Button>
                   </div>
@@ -165,6 +181,6 @@ export default function DepositPage() {
           )}
         </div>
       </div>
-    </Layout>
+    </PageLayout>
   )
 }

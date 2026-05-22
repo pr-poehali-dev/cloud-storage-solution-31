@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label'
 import Icon from '@/components/ui/icon'
 import { useAuth } from '@/context/AuthContext'
 import { apiWithdraw } from '@/lib/api'
-import Layout from '@/components/landing/Layout'
+import PageLayout from '@/components/landing/PageLayout'
 
 type Method = 'bank_card' | 'sbp' | 'crypto'
 
@@ -65,70 +65,83 @@ export default function WithdrawPage() {
     }
   }
 
-  const methods: { key: Method; label: string; icon: string }[] = [
-    { key: 'bank_card', label: 'Карта', icon: 'CreditCard' },
-    { key: 'sbp', label: 'СБП', icon: 'Zap' },
-    { key: 'crypto', label: 'Крипто', icon: 'Bitcoin' },
+  const methods: { key: Method; label: string; icon: string; desc: string }[] = [
+    { key: 'bank_card', label: 'Карта', icon: 'CreditCard', desc: 'Visa, МИР' },
+    { key: 'sbp', label: 'СБП', icon: 'Zap', desc: 'По телефону' },
+    { key: 'crypto', label: 'Крипто', icon: 'Bitcoin', desc: 'USDT, BTC' },
   ]
 
   if (loading || !user) {
-    return <Layout><div className="h-full flex items-center justify-center"><p className="text-neutral-400">Загрузка...</p></div></Layout>
+    return (
+      <PageLayout>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-[#FF4D00] border-t-transparent rounded-full animate-spin" />
+        </div>
+      </PageLayout>
+    )
   }
 
   return (
-    <Layout>
-      <div className="h-full overflow-y-auto">
-        <div className="max-w-lg mx-auto p-6 md:p-10">
+    <PageLayout imgIndex={0}>
+      <div className="min-h-screen overflow-y-auto">
+        <div className="max-w-xl mx-auto p-5 md:p-8">
+
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-            <Link to="/dashboard" className="text-neutral-500 hover:text-neutral-300 text-sm flex items-center gap-1 mb-6">
+            <Link to="/dashboard" className="text-neutral-500 hover:text-neutral-300 text-sm flex items-center gap-1.5 mb-6 transition-colors">
               <Icon name="ArrowLeft" size={14} /> Назад в кабинет
             </Link>
             <h1 className="text-3xl md:text-4xl font-bold text-white">Вывод средств</h1>
-            <p className="text-neutral-400 mt-1">
-              Доступно: <span className="text-[#FF4D00] font-semibold">{balance.toFixed(2)} ₽</span>
-              <span className="text-neutral-600 text-sm ml-2">· мин. 1 000 ₽</span>
-            </p>
+            <div className="flex items-center gap-3 mt-2">
+              <div className="bg-[#FF4D00]/10 border border-[#FF4D00]/30 rounded-xl px-3 py-1.5 inline-flex items-center gap-2">
+                <Icon name="Wallet" size={14} className="text-[#FF4D00]" />
+                <span className="text-[#FF4D00] font-semibold text-sm">{balance.toFixed(2)} ₽</span>
+              </div>
+              <span className="text-neutral-600 text-sm">· мин. 1 000 ₽</span>
+            </div>
           </motion.div>
 
           {/* Tabs */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-            className="flex gap-2 mb-6">
+            className="grid grid-cols-3 gap-2 mb-6">
             {methods.map(m => (
               <button key={m.key} onClick={() => setMethod(m.key)}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                className={`flex flex-col items-center gap-1.5 py-3 rounded-2xl text-xs font-medium transition-all ${
                   method === m.key
-                    ? 'bg-[#FF4D00] text-white'
+                    ? 'bg-[#FF4D00] text-white shadow-lg shadow-orange-900/30'
                     : 'bg-white/5 text-neutral-400 hover:bg-white/10 border border-white/10'
                 }`}>
-                <Icon name={m.icon as Parameters<typeof Icon>[0]['name']} size={15} />
-                {m.label}
+                <Icon name={m.icon as Parameters<typeof Icon>[0]['name']} size={18} />
+                <span className="font-semibold">{m.label}</span>
+                <span className={`text-xs ${method === m.key ? 'text-orange-200' : 'text-neutral-600'}`}>{m.desc}</span>
               </button>
             ))}
           </motion.div>
 
           <motion.form onSubmit={handleSubmit}
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-            className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-4">
+            className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-5">
 
             {/* Сумма */}
             <div>
-              <Label className="text-neutral-300 mb-1.5 block">Сумма (₽)</Label>
+              <Label className="text-neutral-300 mb-2 block text-sm">Сумма вывода (₽)</Label>
               <Input
                 type="number" value={amount} onChange={e => setAmount(e.target.value)}
                 min={1000} max={balance} placeholder="Минимум 1 000 ₽"
-                className="bg-white/5 border-white/20 text-white placeholder:text-neutral-600 focus:border-[#FF4D00]"
+                className="bg-white/5 border-white/20 text-white placeholder:text-neutral-600 focus:border-[#FF4D00] h-12 text-lg mb-3"
               />
-              <div className="flex gap-2 mt-2">
+              <div className="flex gap-2 flex-wrap">
                 {[1000, 5000, 10000].filter(v => v <= balance).map(v => (
                   <button key={v} type="button" onClick={() => setAmount(String(v))}
-                    className={`px-3 py-1 rounded-lg text-xs transition-all ${
-                      amount === String(v) ? 'bg-[#FF4D00] text-white' : 'bg-white/5 border border-white/10 text-neutral-400'
+                    className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                      amount === String(v)
+                        ? 'bg-[#FF4D00] text-white'
+                        : 'bg-white/5 border border-white/10 text-neutral-400 hover:border-[#FF4D00]/40'
                     }`}>
                     {v.toLocaleString('ru-RU')} ₽
                   </button>
                 ))}
                 <button type="button" onClick={() => setAmount(String(Math.floor(balance)))}
-                  className="px-3 py-1 rounded-lg text-xs bg-white/5 border border-white/10 text-neutral-400">
+                  className="px-3 py-1.5 rounded-xl text-xs font-medium bg-white/5 border border-white/10 text-neutral-400 hover:border-white/30 transition-all">
                   Всё
                 </button>
               </div>
@@ -137,22 +150,22 @@ export default function WithdrawPage() {
             {/* Реквизиты */}
             {method === 'bank_card' && (
               <div>
-                <Label className="text-neutral-300 mb-1.5 block">Номер карты</Label>
+                <Label className="text-neutral-300 mb-2 block text-sm">Номер карты</Label>
                 <Input
                   value={cardNumber} onChange={e => setCardNumber(e.target.value)}
                   placeholder="0000 0000 0000 0000" maxLength={19}
-                  className="bg-white/5 border-white/20 text-white placeholder:text-neutral-600 focus:border-[#FF4D00] font-mono"
+                  className="bg-white/5 border-white/20 text-white placeholder:text-neutral-600 focus:border-[#FF4D00] font-mono h-11"
                 />
               </div>
             )}
 
             {method === 'sbp' && (
               <div>
-                <Label className="text-neutral-300 mb-1.5 block">Номер телефона</Label>
+                <Label className="text-neutral-300 mb-2 block text-sm">Номер телефона</Label>
                 <Input
                   value={phone} onChange={e => setPhone(e.target.value)}
                   placeholder="+7 900 000 00 00" type="tel"
-                  className="bg-white/5 border-white/20 text-white placeholder:text-neutral-600 focus:border-[#FF4D00]"
+                  className="bg-white/5 border-white/20 text-white placeholder:text-neutral-600 focus:border-[#FF4D00] h-11"
                 />
               </div>
             )}
@@ -160,12 +173,14 @@ export default function WithdrawPage() {
             {method === 'crypto' && (
               <>
                 <div>
-                  <Label className="text-neutral-300 mb-1.5 block">Монета</Label>
+                  <Label className="text-neutral-300 mb-2 block text-sm">Монета</Label>
                   <div className="flex gap-2">
                     {CRYPTO_COINS.map(c => (
                       <button key={c} type="button" onClick={() => setCryptoCoin(c)}
-                        className={`flex-1 py-2 rounded-xl text-xs font-medium transition-all ${
-                          cryptoCoin === c ? 'bg-[#FF4D00] text-white' : 'bg-white/5 border border-white/10 text-neutral-400'
+                        className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all ${
+                          cryptoCoin === c
+                            ? 'bg-[#FF4D00] text-white'
+                            : 'bg-white/5 border border-white/10 text-neutral-400 hover:border-[#FF4D00]/40'
                         }`}>
                         {c}
                       </button>
@@ -173,11 +188,11 @@ export default function WithdrawPage() {
                   </div>
                 </div>
                 <div>
-                  <Label className="text-neutral-300 mb-1.5 block">Адрес кошелька</Label>
+                  <Label className="text-neutral-300 mb-2 block text-sm">Адрес кошелька</Label>
                   <Input
                     value={cryptoAddress} onChange={e => setCryptoAddress(e.target.value)}
                     placeholder="Вставьте адрес..."
-                    className="bg-white/5 border-white/20 text-white placeholder:text-neutral-600 focus:border-[#FF4D00] font-mono text-sm"
+                    className="bg-white/5 border-white/20 text-white placeholder:text-neutral-600 focus:border-[#FF4D00] font-mono text-sm h-11"
                   />
                 </div>
                 <div className="flex items-start gap-2 p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
@@ -189,25 +204,35 @@ export default function WithdrawPage() {
 
             {error && (
               <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-                <Icon name="AlertCircle" size={15} className="text-red-400 shrink-0" />
+                <Icon name="AlertCircle" size={14} className="text-red-400 shrink-0" />
                 <p className="text-red-400 text-sm">{error}</p>
               </div>
             )}
 
             {success && (
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-green-500/10 border border-green-500/20">
-                <Icon name="CheckCircle" size={15} className="text-green-400 shrink-0" />
-                <p className="text-green-400 text-sm">{success}</p>
+              <div className="flex items-start gap-3 p-4 rounded-xl bg-green-500/10 border border-green-500/20">
+                <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+                  <Icon name="Check" size={16} className="text-green-400" />
+                </div>
+                <div>
+                  <p className="text-green-400 font-medium text-sm">Заявка принята!</p>
+                  <p className="text-green-400/70 text-xs mt-0.5">{success}</p>
+                </div>
               </div>
             )}
 
             <Button type="submit" disabled={loading2} size="lg"
-              className="w-full bg-[#FF4D00] hover:bg-[#e64500] text-white border-0">
-              {loading2 ? 'Обрабатываем...' : `Вывести ${parseFloat(amount || '0').toLocaleString('ru-RU')} ₽`}
+              className="w-full bg-[#FF4D00] hover:bg-[#e64500] text-white border-0 h-12 text-base">
+              {loading2 ? (
+                <span className="flex items-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Оформляем заявку...
+                </span>
+              ) : `Вывести ${parseFloat(amount || '0').toLocaleString('ru-RU')} ₽`}
             </Button>
           </motion.form>
         </div>
       </div>
-    </Layout>
+    </PageLayout>
   )
 }
