@@ -8,6 +8,7 @@ export interface Section {
   showButton?: boolean
   buttonText?: string
   isProfile?: boolean
+  footer?: ReactNode
 }
 
 export interface SectionProps extends Section {

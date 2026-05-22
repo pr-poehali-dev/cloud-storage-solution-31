@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Link } from "react-router-dom"
 import type { SectionProps } from "@/types"
 
-export default function Section({ id, title, subtitle, content, isActive, showButton, buttonText }: SectionProps) {
+export default function Section({ id, title, subtitle, content, isActive, showButton, buttonText, footer }: SectionProps) {
   return (
     <section id={id} className="relative h-screen w-full snap-start flex flex-col justify-center p-8 md:p-16 lg:p-24">
       {subtitle && (
@@ -59,6 +59,15 @@ export default function Section({ id, title, subtitle, content, isActive, showBu
           >
             <Link to="/login">Войти</Link>
           </Button>
+        </motion.div>
+      )}
+      {footer && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={isActive ? { opacity: 1 } : {}}
+          transition={{ duration: 0.5, delay: 0.6 }}
+        >
+          {footer}
         </motion.div>
       )}
     </section>

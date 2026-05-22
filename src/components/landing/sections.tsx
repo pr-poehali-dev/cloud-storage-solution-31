@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge"
+import { Link } from "react-router-dom"
 
 export const sections = [
   {
@@ -27,6 +28,13 @@ export const sections = [
     title: 'Присоединяйтесь сегодня',
     content: 'Короткая регистрация, минимальный вход от 100 ₽. Начните получать дивиденды уже через несколько минут.',
     showButton: true,
-    buttonText: 'Зарегистрироваться'
+    buttonText: 'Зарегистрироваться',
+    footer: (
+      <div className="flex flex-wrap gap-4 mt-8">
+        <Link to="/terms" className="text-neutral-500 hover:text-neutral-300 text-sm transition-colors">Пользовательское соглашение</Link>
+        <Link to="/privacy" className="text-neutral-500 hover:text-neutral-300 text-sm transition-colors">Политика конфиденциальности</Link>
+        <Link to="/offer" className="text-neutral-500 hover:text-neutral-300 text-sm transition-colors">Публичная оферта</Link>
+      </div>
+    )
   },
 ]
