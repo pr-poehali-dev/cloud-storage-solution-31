@@ -8,6 +8,14 @@ import Layout from '@/components/landing/Layout'
 
 const WEEKLY_SECONDS = 7 * 24 * 3600
 
+function getWeekStart(): Date {
+  const now = new Date()
+  const day = now.getUTCDay() // 0=Sun
+  const diff = (day === 0 ? 6 : day - 1) // Mon=0
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff))
+  return monday
+}
+
 export default function DashboardPage() {
   const { user, loading, logout, refresh } = useAuth()
   const navigate = useNavigate()
@@ -22,7 +30,15 @@ export default function DashboardPage() {
     if (!user) return
     const weeklyRate = (user.deposit * user.rate) / 100
     const perSecond = weeklyRate / WEEKLY_SECONDS
-    setLiveDividends(user.dividends_total)
+
+    // Сколько секунд прошло с начала текущей недели
+    const weekStart = getWeekStart()
+    const secondsElapsed = (Date.now() - weekStart.getTime()) / 1000
+    // Накопленное за эту неделю (не зачислено в БД ещё)
+    const accruedThisWeek = perSecond * secondsElapsed
+
+    setLiveDividends(user.dividends_total + accruedThisWeek)
+
     const interval = setInterval(() => {
       setLiveDividends(prev => prev + perSecond)
     }, 1000)
