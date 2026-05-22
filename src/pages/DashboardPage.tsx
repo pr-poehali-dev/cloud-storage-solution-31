@@ -20,9 +20,12 @@ function getWeekStart(): number {
 function calcNow(): number {
   try {
     const raw = localStorage.getItem(ANCHOR_KEY)
+    console.log('[calcNow] raw from localStorage:', raw)
     if (!raw) return 0
     const { base, ts, perSecond } = JSON.parse(raw)
-    return base + perSecond * ((Date.now() - ts) / 1000)
+    const result = base + perSecond * ((Date.now() - ts) / 1000)
+    console.log('[calcNow] base:', base, 'elapsed:', (Date.now() - ts) / 1000, 'result:', result)
+    return result
   } catch { return 0 }
 }
 
@@ -48,7 +51,9 @@ export default function DashboardPage() {
     const saved = calcNow()
     const base = Math.max(freshBase, saved)
 
-    localStorage.setItem(ANCHOR_KEY, JSON.stringify({ base, ts: Date.now(), perSecond }))
+    const anchor = { base, ts: Date.now(), perSecond }
+    console.log('[anchor] saving:', anchor)
+    localStorage.setItem(ANCHOR_KEY, JSON.stringify(anchor))
   }, [user])
 
   // Тик каждую секунду — просто триггерим ре-рендер
