@@ -15,10 +15,40 @@ function getWeekStart(): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff))
 }
 
+const LIVE_KEY = 'live_dividends_snapshot'
+
+// Сохраняем снапшот: значение + время сохранения
+function saveSnapshot(value: number) {
+  localStorage.setItem(LIVE_KEY, JSON.stringify({ value, ts: Date.now() }))
+}
+
+// Восстанавливаем с учётом прошедшего времени
+function loadSnapshot(perSecond: number): number | null {
+  try {
+    const raw = localStorage.getItem(LIVE_KEY)
+    if (!raw) return null
+    const { value, ts } = JSON.parse(raw)
+    const elapsed = (Date.now() - ts) / 1000
+    return value + perSecond * elapsed
+  } catch {
+    return null
+  }
+}
+
 export default function DashboardPage() {
   const { user, loading, logout, refresh } = useAuth()
   const navigate = useNavigate()
-  const [liveDividends, setLiveDividends] = useState(0)
+
+  // Стартуем сразу со значения из localStorage (без мигания 0)
+  const [liveDividends, setLiveDividends] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem(LIVE_KEY)
+      if (!raw) return 0
+      const { value } = JSON.parse(raw)
+      return value
+    } catch { return 0 }
+  })
+
   const [copied, setCopied] = useState(false)
   const startedRef = useRef(false)
 
@@ -28,21 +58,26 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!user) return
-    // Запускаем счётчик только один раз при первой загрузке данных
     if (startedRef.current) return
     startedRef.current = true
 
     const weeklyRate = (user.deposit * user.rate) / 100
     const perSecond = weeklyRate / WEEKLY_SECONDS
 
-    // Считаем сколько уже накопилось с начала недели (непрерывно, без сброса)
+    // Пробуем восстановить из снапшота, иначе считаем с начала недели
+    const snapshot = loadSnapshot(perSecond)
     const secondsElapsed = (Date.now() - getWeekStart().getTime()) / 1000
-    const accruedThisWeek = perSecond * secondsElapsed
+    const accruedThisWeek = user.dividends_total + perSecond * secondsElapsed
+    const startValue = snapshot !== null ? Math.max(snapshot, accruedThisWeek) : accruedThisWeek
 
-    setLiveDividends(user.dividends_total + accruedThisWeek)
+    setLiveDividends(startValue)
 
     const interval = setInterval(() => {
-      setLiveDividends(prev => prev + perSecond)
+      setLiveDividends(prev => {
+        const next = prev + perSecond
+        saveSnapshot(next)
+        return next
+      })
     }, 1000)
     return () => clearInterval(interval)
   }, [user])
