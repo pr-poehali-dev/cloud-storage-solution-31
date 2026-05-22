@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -7,82 +7,55 @@ import { useAuth } from '@/context/AuthContext'
 import Layout from '@/components/landing/Layout'
 
 const WEEKLY_SECONDS = 7 * 24 * 3600
+const ANCHOR_KEY = 'div_anchor' // { base, ts, perSecond }
 
-function getWeekStart(): Date {
+function getWeekStart(): number {
   const now = new Date()
   const day = now.getUTCDay()
   const diff = day === 0 ? 6 : day - 1
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff))
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff)
 }
 
-const LIVE_KEY = 'live_dividends_snapshot'
-
-// Сохраняем снапшот: значение + время сохранения
-function saveSnapshot(value: number) {
-  localStorage.setItem(LIVE_KEY, JSON.stringify({ value, ts: Date.now() }))
-}
-
-// Восстанавливаем с учётом прошедшего времени
-function loadSnapshot(perSecond: number): number | null {
+// Считаем текущее значение по якорю (base + perSecond * elapsed)
+function calcNow(): number {
   try {
-    const raw = localStorage.getItem(LIVE_KEY)
-    if (!raw) return null
-    const { value, ts } = JSON.parse(raw)
-    const elapsed = (Date.now() - ts) / 1000
-    return value + perSecond * elapsed
-  } catch {
-    return null
-  }
+    const raw = localStorage.getItem(ANCHOR_KEY)
+    if (!raw) return 0
+    const { base, ts, perSecond } = JSON.parse(raw)
+    return base + perSecond * ((Date.now() - ts) / 1000)
+  } catch { return 0 }
 }
 
 export default function DashboardPage() {
   const { user, loading, logout, refresh } = useAuth()
   const navigate = useNavigate()
-
-  // Стартуем сразу со значения из localStorage (без мигания 0)
-  const [liveDividends, setLiveDividends] = useState<number>(() => {
-    try {
-      const raw = localStorage.getItem(LIVE_KEY)
-      if (!raw) return 0
-      const { value } = JSON.parse(raw)
-      return value
-    } catch { return 0 }
-  })
-
+  const [tick, setTick] = useState(0)
   const [copied, setCopied] = useState(false)
-  const startedRef = useRef(false)
 
   useEffect(() => {
     if (!loading && !user) navigate('/login')
   }, [user, loading, navigate])
 
+  // Когда пришли данные пользователя — обновляем якорь
   useEffect(() => {
     if (!user) return
-    if (startedRef.current) return
-    startedRef.current = true
+    const perSecond = (user.deposit * user.rate / 100) / WEEKLY_SECONDS
+    const secondsFromWeekStart = (Date.now() - getWeekStart()) / 1000
+    // base = всё что уже зачислено в БД + накопленное с начала недели
+    const freshBase = user.dividends_total + perSecond * secondsFromWeekStart
 
-    const weeklyRate = (user.deposit * user.rate) / 100
-    const perSecond = weeklyRate / WEEKLY_SECONDS
+    // Берём максимум из свежего и уже сохранённого (чтобы не откатиться назад)
+    const saved = calcNow()
+    const base = Math.max(freshBase, saved)
 
-    const snapshot = loadSnapshot(perSecond)
-    const secondsElapsed = (Date.now() - getWeekStart().getTime()) / 1000
-    const accruedThisWeek = user.dividends_total + perSecond * secondsElapsed
-    const startValue = snapshot !== null ? Math.max(snapshot, accruedThisWeek) : accruedThisWeek
-
-    console.log('[counter] deposit:', user.deposit, 'rate:', user.rate, 'dividends_total:', user.dividends_total)
-    console.log('[counter] perSecond:', perSecond, 'accruedThisWeek:', accruedThisWeek, 'snapshot:', snapshot, 'startValue:', startValue)
-
-    setLiveDividends(startValue)
-
-    const interval = setInterval(() => {
-      setLiveDividends(prev => {
-        const next = prev + perSecond
-        saveSnapshot(next)
-        return next
-      })
-    }, 1000)
-    return () => clearInterval(interval)
+    localStorage.setItem(ANCHOR_KEY, JSON.stringify({ base, ts: Date.now(), perSecond }))
   }, [user])
+
+  // Тик каждую секунду — просто триггерим ре-рендер
+  useEffect(() => {
+    const interval = setInterval(() => setTick(t => t + 1), 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   const handleLogout = async () => {
     await logout()
@@ -96,17 +69,26 @@ export default function DashboardPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  if (loading || !user) {
-    return (
-      <Layout>
-        <div className="h-full flex items-center justify-center">
-          <p className="text-neutral-400">Загрузка...</p>
-        </div>
-      </Layout>
-    )
+  // Текущее значение — всегда вычисляется из якоря, не из state
+  const liveDividends = calcNow()
+  void tick // используем tick чтобы обновлялся каждую секунду
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/')
   }
 
-  const balance = liveDividends + user.referral_total
+  const copyRefLink = () => {
+    if (!user) return
+    navigator.clipboard.writeText(`${window.location.origin}/register?ref=${user.referral_code}`)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  // Показываем счётчик из localStorage сразу, не ждём загрузки профиля
+  const balance = liveDividends + (user?.referral_total ?? 0)
+
+  if (!loading && !user) return null
 
   return (
     <Layout>
@@ -123,12 +105,12 @@ export default function DashboardPage() {
                 <Icon name="User" size={20} className="text-white" />
               </div>
               <div>
-                <p className="text-white font-semibold">{user.name}</p>
-                <p className="text-neutral-500 text-xs">{user.email}</p>
+                <p className="text-white font-semibold">{user?.name ?? '...'}</p>
+                <p className="text-neutral-500 text-xs">{user?.email ?? ''}</p>
               </div>
             </div>
             <div className="flex gap-2">
-              {user.is_admin && (
+              {user?.is_admin && (
                 <Button variant="outline" size="sm" onClick={() => navigate('/admin')}
                   className="border-white/20 text-white bg-transparent hover:bg-white/10">
                   <Icon name="Settings" size={14} className="mr-1" /> Админка
@@ -155,7 +137,7 @@ export default function DashboardPage() {
               </span>
               <span className="text-2xl text-white mb-1">₽</span>
             </div>
-            <p className="text-neutral-500 text-xs">Начисляется каждую секунду · {user.rate}% в неделю</p>
+            <p className="text-neutral-500 text-xs">Начисляется каждую секунду · {user?.rate ?? 10}% в неделю</p>
           </motion.div>
 
           {/* Stats grid */}
@@ -166,10 +148,10 @@ export default function DashboardPage() {
             transition={{ delay: 0.2 }}
           >
             {[
-              { label: 'Депозит', value: `${user.deposit.toLocaleString('ru-RU')} ₽`, icon: 'Wallet' },
-              { label: 'Доходность', value: `${user.rate}% / нед`, icon: 'TrendingUp' },
-              { label: 'Рефералы', value: `${user.referral_count} чел.`, icon: 'Users' },
-              { label: 'Реф. бонусы', value: `${user.referral_total.toFixed(2)} ₽`, icon: 'Gift' },
+              { label: 'Депозит', value: `${(user?.deposit ?? 0).toLocaleString('ru-RU')} ₽`, icon: 'Wallet' },
+              { label: 'Доходность', value: `${user?.rate ?? 10}% / нед`, icon: 'TrendingUp' },
+              { label: 'Рефералы', value: `${user?.referral_count ?? 0} чел.`, icon: 'Users' },
+              { label: 'Реф. бонусы', value: `${(user?.referral_total ?? 0).toFixed(2)} ₽`, icon: 'Gift' },
             ].map(item => (
               <div key={item.label} className="bg-white/5 border border-white/10 rounded-xl p-4">
                 <Icon name={item.icon as Parameters<typeof Icon>[0]['name']} size={16} className="text-neutral-500 mb-2" />
@@ -203,6 +185,7 @@ export default function DashboardPage() {
           </motion.div>
 
           {/* Referral */}
+          {user && (
           <motion.div
             className="bg-white/5 border border-white/10 rounded-2xl p-5"
             initial={{ opacity: 0, y: 20 }}
@@ -221,6 +204,7 @@ export default function DashboardPage() {
               </Button>
             </div>
           </motion.div>
+          )}
         </div>
       </div>
     </Layout>
