@@ -123,7 +123,7 @@ export interface AdminWithdrawal {
 export async function apiProfile() {
   const res = await fetch(PROFILE_URL, { method: 'GET', headers: authHeaders() })
   const json = await res.json()
-  if (!res.ok) throw new Error(json.error || 'Ошибка')
+  if (!res.ok) throw new Error(`${res.status}: ${json.error || 'Ошибка'}`)
   return json as {
     id: number; name: string; email: string; referral_code: string
     is_admin: boolean; deposit: number; dividends_total: number

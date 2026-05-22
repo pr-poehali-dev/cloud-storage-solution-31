@@ -76,7 +76,8 @@ export default function DashboardPage() {
   // Показываем счётчик из localStorage сразу, не ждём загрузки профиля
   const balance = liveDividends + (user?.referral_total ?? 0)
 
-  if (!loading && !user) return null
+  // Редиректим только если нет ни user, ни сохранённой сессии
+  if (!loading && !user && !localStorage.getItem('session_id')) return null
 
   return (
     <Layout>

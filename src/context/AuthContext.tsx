@@ -27,9 +27,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const profile = await apiProfile()
       setUser(profile)
-    } catch {
-      localStorage.removeItem('session_id')
-      setUser(null)
+    } catch (e: unknown) {
+      // Удаляем сессию только при 401 (истекла), но не при сетевых ошибках
+      const is401 = e instanceof Error && e.message.includes('401')
+      if (is401) {
+        localStorage.removeItem('session_id')
+        setUser(null)
+      }
+      // При сетевой ошибке — оставляем user=null но сессию не трогаем
     } finally {
       setLoading(false)
     }
