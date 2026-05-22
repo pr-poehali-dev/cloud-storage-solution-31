@@ -69,7 +69,7 @@ def handler(event: dict, context) -> dict:
     body = json.loads(event.get('body') or '{}')
 
     # POST /reset-request — отправить письмо со ссылкой
-    if method == 'POST' and path.endswith('/reset-request'):
+    if method == 'POST' and (path.endswith('/reset-request') or body.get('action') == 'reset-request'):
         email = (body.get('email') or '').strip().lower()
         if not email:
             return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Укажите email'})}
@@ -115,7 +115,7 @@ def handler(event: dict, context) -> dict:
         return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True})}
 
     # POST /reset-confirm — установить новый пароль
-    if method == 'POST' and path.endswith('/reset-confirm'):
+    if method == 'POST' and (path.endswith('/reset-confirm') or body.get('action') == 'reset-confirm'):
         token = (body.get('token') or '').strip()
         new_password = body.get('password') or ''
 

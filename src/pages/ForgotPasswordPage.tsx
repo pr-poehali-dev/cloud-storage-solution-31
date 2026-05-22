@@ -21,10 +21,10 @@ export default function ForgotPasswordPage() {
     setError('')
     setLoading(true)
     try {
-      await fetch(LOGIN_URL + '/reset-request', {
+      await fetch(LOGIN_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        body: JSON.stringify({ action: 'reset-request', email: email.trim().toLowerCase() }),
       })
       setDone(true)
     } catch {

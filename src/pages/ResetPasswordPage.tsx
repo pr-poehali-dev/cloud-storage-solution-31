@@ -34,10 +34,10 @@ export default function ResetPasswordPage() {
 
     setLoading(true)
     try {
-      const res = await fetch(LOGIN_URL + '/reset-confirm', {
+      const res = await fetch(LOGIN_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, password }),
+        body: JSON.stringify({ action: 'reset-confirm', token, password }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Ошибка')
