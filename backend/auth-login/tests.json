@@ -7,6 +7,15 @@
       "body": {"email": "nobody@example.com", "password": "wrongpass"},
       "expectedStatus": 401,
       "bodyMatcher": "partial"
+    },
+
+    {
+      "name": "Reset confirm invalid token",
+      "method": "POST",
+      "path": "/reset-confirm",
+      "body": {"token": "invalidtoken", "password": "newpass123"},
+      "expectedStatus": 400,
+      "bodyMatcher": "partial"
     }
   ]
 }
