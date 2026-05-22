@@ -4,6 +4,7 @@ import Section from './Section'
 import Layout from './Layout'
 import ProfileSection from './ProfileSection'
 import CryptoSection from './CryptoSection'
+import HeroSection from './HeroSection'
 import { sections } from './sections'
 
 export default function LandingPage() {
@@ -69,6 +70,8 @@ export default function LandingPage() {
             <ProfileSection key={section.id} isActive={index === activeSection} />
           ) : section.isCrypto ? (
             <CryptoSection key={section.id} isActive={index === activeSection} />
+          ) : section.id === 'hero' ? (
+            <HeroSection key={section.id} isActive={index === activeSection} />
           ) : (
             <Section
               key={section.id}
