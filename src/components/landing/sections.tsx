@@ -24,6 +24,10 @@ export const sections = [
     isProfile: true,
   },
   {
+    id: 'crypto',
+    isCrypto: true,
+  },
+  {
     id: 'join',
     title: 'Присоединяйтесь сегодня',
     content: 'Короткая регистрация, минимальный вход от 100 ₽. Начните получать дивиденды уже через несколько минут.',

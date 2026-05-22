@@ -8,6 +8,7 @@ export interface Section {
   showButton?: boolean
   buttonText?: string
   isProfile?: boolean
+  isCrypto?: boolean
   footer?: ReactNode
 }
 
