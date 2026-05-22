@@ -64,11 +64,13 @@ export default function DashboardPage() {
     const weeklyRate = (user.deposit * user.rate) / 100
     const perSecond = weeklyRate / WEEKLY_SECONDS
 
-    // Пробуем восстановить из снапшота, иначе считаем с начала недели
     const snapshot = loadSnapshot(perSecond)
     const secondsElapsed = (Date.now() - getWeekStart().getTime()) / 1000
     const accruedThisWeek = user.dividends_total + perSecond * secondsElapsed
     const startValue = snapshot !== null ? Math.max(snapshot, accruedThisWeek) : accruedThisWeek
+
+    console.log('[counter] deposit:', user.deposit, 'rate:', user.rate, 'dividends_total:', user.dividends_total)
+    console.log('[counter] perSecond:', perSecond, 'accruedThisWeek:', accruedThisWeek, 'snapshot:', snapshot, 'startValue:', startValue)
 
     setLiveDividends(startValue)
 
