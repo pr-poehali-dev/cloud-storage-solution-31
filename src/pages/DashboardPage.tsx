@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import Icon from '@/components/ui/icon'
 import { useAuth } from '@/context/AuthContext'
 import { apiGetBoosts, apiCreateBoost } from '@/lib/api'
+import FortuneWheel from '@/components/FortuneWheel'
 
 const WEEKLY_SECONDS = 7 * 24 * 3600
 const ANCHOR_KEY = 'div_anchor'
@@ -61,6 +62,7 @@ export default function DashboardPage() {
   const [boostSuccess, setBoostSuccess] = useState('')
   const [boostHistory, setBoostHistory] = useState<BoostItem[]>([])
   const [boostPercent, setBoostPercent] = useState(0)
+  const [showWheel, setShowWheel] = useState(false)
 
   useEffect(() => {
     if (!loading && !user) navigate('/login')
@@ -246,7 +248,7 @@ export default function DashboardPage() {
 
         {/* ── Actions ────────────────────────────────────────── */}
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-          className="grid grid-cols-5 gap-3">
+          className="grid grid-cols-3 md:grid-cols-6 gap-3">
           {[
             { label: 'Пополнить', icon: 'PlusCircle', action: () => navigate('/deposit'), style: 'bg-[#FF4D00]/10 border-[#FF4D00]/30 hover:bg-[#FF4D00]/20 hover:border-[#FF4D00]/50', iconBg: 'bg-[#FF4D00]', iconColor: 'text-white' },
             { label: 'Вывести', icon: 'ArrowUpFromLine', action: () => navigate('/withdraw'), style: 'bg-white/3 border-white/10 hover:bg-white/6 hover:border-white/20', iconBg: 'bg-white/10', iconColor: 'text-white' },
@@ -261,6 +263,16 @@ export default function DashboardPage() {
               <span className="text-white text-xs font-medium">{btn.label}</span>
             </button>
           ))}
+
+          {/* Wheel button */}
+          <button onClick={() => setShowWheel(true)}
+            className="group flex flex-col items-center gap-2 p-4 rounded-2xl border bg-gradient-to-b from-purple-600/15 to-pink-600/10 border-purple-500/30 hover:from-purple-600/25 hover:border-purple-500/50 transition-all relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/5 pointer-events-none" />
+            <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg shadow-purple-500/30">
+              <Icon name="Dices" size={16} className="text-white" />
+            </div>
+            <span className="relative text-pink-400 text-xs font-bold">Колесо</span>
+          </button>
 
           {/* Boost button */}
           <button onClick={() => setShowBoost(true)}
@@ -503,6 +515,30 @@ export default function DashboardPage() {
                   Сумма буста списывается с вашего баланса. Эффект суммируется при повторных бустах.
                 </p>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Wheel Modal ─────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showWheel && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-black/80 backdrop-blur-sm"
+            onClick={() => setShowWheel(false)}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.25 }}
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-2xl bg-[#0e0e0e] border border-white/10 rounded-3xl overflow-hidden shadow-2xl shadow-purple-900/20"
+              style={{ maxHeight: '92vh' }}>
+              <FortuneWheel
+                balance={balance}
+                onClose={() => setShowWheel(false)}
+                onResult={() => refresh()}
+              />
             </motion.div>
           </motion.div>
         )}

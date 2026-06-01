@@ -561,6 +561,111 @@ def handler(event: dict, context) -> dict:
                     conn.commit()
                 return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True, 'boost_id': boost_id, 'bonus_pct': bonus_pct})}
 
+        # ── WHEEL ROUTES ──────────────────────────────────────────
+        if '/wheel' in path:
+            import json as _json
+            import random as _random
+
+            # 16 секций: 4×x2, 2×x5, 1×x10, 9×lose (вероятность выигрыша ~7/16 = 43.75%, но
+            # по заданию 20% — реализуем через random с весами)
+            # Сегменты колеса (для анимации на фронте, фиксированный порядок)
+            WHEEL_SEGMENTS = [
+                {'label': 'x2',   'mult': 2.0,  'color': '#22c55e'},
+                {'label': '💀',   'mult': 0.0,  'color': '#374151'},
+                {'label': 'x5',   'mult': 5.0,  'color': '#f59e0b'},
+                {'label': '💀',   'mult': 0.0,  'color': '#374151'},
+                {'label': 'x2',   'mult': 2.0,  'color': '#22c55e'},
+                {'label': '💀',   'mult': 0.0,  'color': '#374151'},
+                {'label': 'x10',  'mult': 10.0, 'color': '#ef4444'},
+                {'label': '💀',   'mult': 0.0,  'color': '#374151'},
+                {'label': 'x2',   'mult': 2.0,  'color': '#22c55e'},
+                {'label': '💀',   'mult': 0.0,  'color': '#374151'},
+                {'label': 'x5',   'mult': 5.0,  'color': '#f59e0b'},
+                {'label': '💀',   'mult': 0.0,  'color': '#374151'},
+                {'label': 'x2',   'mult': 2.0,  'color': '#22c55e'},
+                {'label': '💀',   'mult': 0.0,  'color': '#374151'},
+                {'label': '💀',   'mult': 0.0,  'color': '#374151'},
+                {'label': '💀',   'mult': 0.0,  'color': '#374151'},
+            ]
+
+            # GET /wheel — история последних спинов
+            if http_method == 'GET':
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT id, bet, multiplier, win_amount, segment, created_at "
+                        "FROM wheel_spins WHERE user_id=%s ORDER BY created_at DESC LIMIT 10",
+                        (user['id'],)
+                    )
+                    rows = cur.fetchall()
+                spins = [{'id': r[0], 'bet': float(r[1]), 'multiplier': float(r[2]),
+                          'win_amount': float(r[3]), 'segment': r[4],
+                          'created_at': str(r[5])} for r in rows]
+                return {'statusCode': 200, 'headers': CORS,
+                        'body': _json.dumps({'spins': spins, 'segments': WHEEL_SEGMENTS})}
+
+            # POST /wheel — сделать спин
+            if http_method == 'POST':
+                body = _json.loads(event.get('body') or '{}')
+                bet = float(body.get('bet', 0))
+                if bet < 100:
+                    return {'statusCode': 400, 'headers': CORS,
+                            'body': _json.dumps({'error': 'Минимальная ставка — 100 ₽'})}
+
+                # Проверяем баланс
+                with conn.cursor() as cur:
+                    cur.execute("SELECT COALESCE(SUM(dv.amount),0) FROM dividends dv WHERE dv.user_id=%s", (user['id'],))
+                    divs = float(cur.fetchone()[0])
+                    cur.execute("SELECT COALESCE(SUM(rp.amount),0) FROM referral_payouts rp WHERE rp.referrer_id=%s", (user['id'],))
+                    refs = float(cur.fetchone()[0])
+                    cur.execute("SELECT COALESCE(SUM(w.amount),0) FROM withdrawals w WHERE w.user_id=%s AND w.status IN ('pending','completed')", (user['id'],))
+                    withdrawn = float(cur.fetchone()[0])
+                available = divs + refs - withdrawn
+                if available < bet:
+                    return {'statusCode': 400, 'headers': CORS,
+                            'body': _json.dumps({'error': f'Недостаточно средств. Доступно: {available:.2f} ₽'})}
+
+                # Определяем результат (вероятность выигрыша 20%)
+                win = _random.random() < 0.20
+                if win:
+                    win_segs = [i for i, s in enumerate(WHEEL_SEGMENTS) if s['mult'] > 0]
+                    seg_idx = _random.choice(win_segs)
+                else:
+                    lose_segs = [i for i, s in enumerate(WHEEL_SEGMENTS) if s['mult'] == 0]
+                    seg_idx = _random.choice(lose_segs)
+
+                seg = WHEEL_SEGMENTS[seg_idx]
+                multiplier = seg['mult']
+                win_amount = round(bet * multiplier - bet, 2)  # чистый выигрыш (или 0 при проигрыше)
+
+                with conn.cursor() as cur:
+                    # Списываем ставку
+                    cur.execute(
+                        "INSERT INTO withdrawals (user_id, amount, method, status) VALUES (%s, %s, 'wheel_bet', 'completed')",
+                        (user['id'], bet)
+                    )
+                    # Если выиграл — зачисляем выигрыш как дивиденды
+                    if multiplier > 0:
+                        payout = round(bet * multiplier, 2)
+                        cur.execute(
+                            "INSERT INTO dividends (user_id, amount) VALUES (%s, %s)",
+                            (user['id'], payout)
+                        )
+                    # Записываем в историю
+                    cur.execute(
+                        "INSERT INTO wheel_spins (user_id, bet, multiplier, win_amount, segment) "
+                        "VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                        (user['id'], bet, multiplier, win_amount, seg['label'])
+                    )
+                    spin_id = cur.fetchone()[0]
+                    conn.commit()
+
+                return {'statusCode': 200, 'headers': CORS, 'body': _json.dumps({
+                    'ok': True, 'spin_id': spin_id,
+                    'seg_idx': seg_idx, 'segment': seg['label'],
+                    'multiplier': multiplier, 'win_amount': win_amount,
+                    'bet': bet, 'win': multiplier > 0
+                })}
+
         # ── PROFILE ROUTE ─────────────────────────────────────────
         with conn.cursor() as cur:
             cur.execute(
