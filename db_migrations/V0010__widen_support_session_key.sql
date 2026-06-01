@@ -1,0 +1,1 @@
+ALTER TABLE t_p27527697_cloud_storage_soluti.support_messages ALTER COLUMN session_key TYPE varchar(256);

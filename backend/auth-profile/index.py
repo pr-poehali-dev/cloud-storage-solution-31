@@ -917,7 +917,7 @@ def handler(event: dict, context) -> dict:
             }
             DEFAULT_ANSWER = 'Понял ваш вопрос! Для детальной помощи обратитесь в нашу тикет-систему: https://poehali.dev/help — операторы ответят в течение часа в рабочее время.'
 
-            session_key = headers.get('X-Session-Id', '') + '_support'
+            session_key = (headers.get('X-Session-Id', '') + '_support')[:250]
 
             # GET — история диалога
             if action_val == 'support-history' or http_method == 'GET':
