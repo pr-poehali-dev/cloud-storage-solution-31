@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import {
   apiAdminUsers, apiAdminDeposits, apiAdminWithdrawals,
   apiAdminApproveWithdrawal, apiAdminRejectWithdrawal,
-  apiAdminConfirmDeposit, apiAdminToggleAdmin,
+  apiAdminConfirmDeposit, apiAdminToggleAdmin, apiAdminAdjustBalance,
   apiAdminDepositCrypto, apiAdminExchangeOrders, apiExchangeCancel,
   apiAdminUserBalances,
   type AdminUser, type AdminDeposit, type AdminWithdrawal, type ExchangeOrder
@@ -67,6 +67,12 @@ export default function AdminPage() {
   // Модалка крипто-балансов
   const [balModal, setBalModal] = useState<{ user: AdminUser; balances: Record<string, number> } | null>(null)
   const [balLoading, setBalLoading] = useState<number | null>(null)
+  // Модалка корректировки баланса
+  const [adjModal, setAdjModal] = useState<AdminUser | null>(null)
+  const [adjAmount, setAdjAmount] = useState('')
+  const [adjComment, setAdjComment] = useState('')
+  const [adjLoading, setAdjLoading] = useState(false)
+  const [adjMsg, setAdjMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
   useEffect(() => {
     if (!loading && (!user || !user.is_admin)) navigate('/')
@@ -295,7 +301,7 @@ export default function AdminPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-white/5 text-neutral-400">
                     <tr>
-                      {['ID', 'Пользователь', 'Депозит', 'Дивиденды', 'Рефералы', 'Баланс', 'Ставка', 'Зарегистрирован', 'Крипта', 'Права'].map(h => (
+                      {['ID', 'Пользователь', 'Депозит', 'Дивиденды', 'Рефералы', 'Баланс', 'Ставка', 'Зарегистрирован', 'Крипта', 'Баланс ±', 'Права'].map(h => (
                         <th key={h} className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">{h}</th>
                       ))}
                     </tr>
@@ -339,6 +345,13 @@ export default function AdminPage() {
                             {balLoading === u.id
                               ? <span className="w-3 h-3 border-2 border-purple-400/30 border-t-purple-400 rounded-full animate-spin" />
                               : <><Icon name="Wallet" size={12} className="mr-1" /> Крипта</>}
+                          </Button>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Button size="sm" variant="outline"
+                            className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 bg-transparent h-7 px-2.5 text-xs"
+                            onClick={() => { setAdjModal(u); setAdjAmount(''); setAdjComment(''); setAdjMsg(null) }}>
+                            <Icon name="PlusMinusIcon" size={12} className="mr-1" fallback="Pencil" /> Изменить
                           </Button>
                         </td>
                         <td className="px-4 py-3">
@@ -548,6 +561,149 @@ export default function AdminPage() {
                 {depMsg && (
                   <p className={`text-xs mt-2 ${depMsg === '✓' ? 'text-green-400' : 'text-red-400'}`}>{depMsg}</p>
                 )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Модалка корректировки баланса ── */}
+      <AnimatePresence>
+        {adjModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
+            onClick={() => setAdjModal(null)}>
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.2 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-[#111] border border-white/15 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+
+              {/* Header */}
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h3 className="text-white font-semibold flex items-center gap-2">
+                    <Icon name="Pencil" size={15} className="text-emerald-400" />
+                    Корректировка баланса
+                  </h3>
+                  <p className="text-neutral-500 text-xs mt-1">{adjModal.name} · {adjModal.email} · #{adjModal.id}</p>
+                </div>
+                <button onClick={() => setAdjModal(null)}
+                  className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-neutral-400 hover:text-white transition-colors">
+                  <Icon name="X" size={15} />
+                </button>
+              </div>
+
+              {/* Текущий баланс */}
+              <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 mb-5 flex items-center justify-between">
+                <span className="text-neutral-400 text-sm">Текущий баланс</span>
+                <span className="text-white font-bold text-lg tabular-nums">{fmt(adjModal.balance)} ₽</span>
+              </div>
+
+              {/* Сумма */}
+              <div className="mb-3">
+                <label className="text-neutral-500 text-xs mb-2 block uppercase tracking-wide">
+                  Сумма (+ зачислить / − списать)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={adjAmount}
+                    onChange={e => setAdjAmount(e.target.value)}
+                    placeholder="например: 5000 или -2000"
+                    className="w-full bg-white/5 border border-white/15 rounded-xl px-4 py-3 text-white placeholder:text-neutral-700 focus:outline-none focus:border-emerald-500/50 text-sm pr-8"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm">₽</span>
+                </div>
+
+                {/* Предпросмотр */}
+                {adjAmount && !isNaN(parseFloat(adjAmount)) && parseFloat(adjAmount) !== 0 && (
+                  <div className={`mt-2 rounded-xl px-4 py-2.5 flex items-center justify-between text-sm border ${
+                    parseFloat(adjAmount) > 0
+                      ? 'bg-green-500/8 border-green-500/20'
+                      : 'bg-red-500/8 border-red-500/20'
+                  }`}>
+                    <span className="text-neutral-400">Станет</span>
+                    <span className={`font-bold tabular-nums ${parseFloat(adjAmount) > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {fmt(Math.max(0, adjModal.balance + parseFloat(adjAmount)))} ₽
+                      <span className="text-xs ml-1.5 font-normal opacity-70">
+                        ({parseFloat(adjAmount) > 0 ? '+' : ''}{fmt(parseFloat(adjAmount))} ₽)
+                      </span>
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Комментарий */}
+              <div className="mb-5">
+                <label className="text-neutral-500 text-xs mb-2 block uppercase tracking-wide">Комментарий</label>
+                <input
+                  value={adjComment}
+                  onChange={e => setAdjComment(e.target.value)}
+                  placeholder="Причина корректировки..."
+                  className="w-full bg-white/5 border border-white/15 rounded-xl px-4 py-2.5 text-white placeholder:text-neutral-700 focus:outline-none focus:border-emerald-500/50 text-sm"
+                />
+              </div>
+
+              {/* Быстрые суммы */}
+              <div className="flex gap-2 mb-5 flex-wrap">
+                {['+1000', '+5000', '+10000', '-1000', '-5000'].map(v => (
+                  <button key={v} onClick={() => setAdjAmount(v)}
+                    className={`text-xs px-3 py-1.5 rounded-xl border transition-all ${
+                      v.startsWith('+')
+                        ? 'bg-green-500/8 border-green-500/20 text-green-400 hover:bg-green-500/15'
+                        : 'bg-red-500/8 border-red-500/20 text-red-400 hover:bg-red-500/15'
+                    }`}>
+                    {v} ₽
+                  </button>
+                ))}
+              </div>
+
+              {/* Сообщение */}
+              {adjMsg && (
+                <div className={`mb-4 flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl border ${
+                  adjMsg.type === 'ok'
+                    ? 'bg-green-500/10 border-green-500/20 text-green-400'
+                    : 'bg-red-500/10 border-red-500/20 text-red-400'
+                }`}>
+                  <Icon name={adjMsg.type === 'ok' ? 'CheckCircle' : 'AlertCircle'} size={14} />
+                  {adjMsg.text}
+                </div>
+              )}
+
+              {/* Кнопки */}
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setAdjModal(null)}
+                  className="flex-1 border-white/15 text-neutral-400 bg-transparent hover:bg-white/5 hover:text-white">
+                  Отмена
+                </Button>
+                <Button
+                  disabled={adjLoading || !adjAmount || isNaN(parseFloat(adjAmount)) || parseFloat(adjAmount) === 0}
+                  onClick={async () => {
+                    const amt = parseFloat(adjAmount)
+                    setAdjLoading(true)
+                    setAdjMsg(null)
+                    try {
+                      const res = await apiAdminAdjustBalance(adjModal.id, amt, adjComment || 'Корректировка администратором')
+                      setAdjMsg({ type: 'ok', text: `Готово! ${res.amount > 0 ? '+' : ''}${fmt(res.amount)} ₽ для ${res.user_name}` })
+                      setAdjAmount('')
+                      setAdjComment('')
+                      load('users')
+                    } catch (e: unknown) {
+                      setAdjMsg({ type: 'err', text: e instanceof Error ? e.message : 'Ошибка' })
+                    } finally {
+                      setAdjLoading(false)
+                    }
+                  }}
+                  className={`flex-1 border-0 font-bold ${
+                    parseFloat(adjAmount) > 0
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                      : 'bg-red-600 hover:bg-red-500 text-white'
+                  } disabled:opacity-40`}>
+                  {adjLoading
+                    ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    : parseFloat(adjAmount) > 0 ? '+ Зачислить' : '− Списать'
+                  }
+                </Button>
               </div>
             </motion.div>
           </motion.div>

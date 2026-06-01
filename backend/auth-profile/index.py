@@ -497,6 +497,7 @@ def handler(event: dict, context) -> dict:
             'admin-reject-withdrawal': ('POST', 'withdrawals/reject'),
             'admin-confirm-deposit': ('POST', 'deposits/confirm'),
             'admin-toggle-admin': ('POST', 'users/toggle-admin'),
+            'admin-adjust-balance': ('POST', 'users/adjust-balance'),
         }
         if action_val in ADMIN_ACTION_MAP:
             http_method, admin_sub = ADMIN_ACTION_MAP[action_val]
@@ -635,6 +636,44 @@ def handler(event: dict, context) -> dict:
                 if not row:
                     return {'statusCode': 404, 'headers': CORS, 'body': json.dumps({'error': 'Пользователь не найден'})}
                 return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True, 'is_admin': row[0]})}
+
+            # POST /admin/users/adjust-balance
+            if http_method == 'POST' and 'adjust-balance' in path:
+                body = json.loads(event.get('body') or '{}')
+                uid = int(body.get('user_id', 0))
+                amount = float(body.get('amount', 0))
+                comment = (body.get('comment') or 'Корректировка администратором')[:200]
+                if uid == 0:
+                    return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Не указан пользователь'})}
+                if amount == 0:
+                    return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Сумма не может быть 0'})}
+                # Проверяем что пользователь существует
+                with conn.cursor() as cur:
+                    cur.execute("SELECT id, name, email FROM users WHERE id=%s", (uid,))
+                    target = cur.fetchone()
+                if not target:
+                    return {'statusCode': 404, 'headers': CORS, 'body': json.dumps({'error': 'Пользователь не найден'})}
+                with conn.cursor() as cur:
+                    if amount > 0:
+                        # Зачисляем как дивиденды с пометкой
+                        cur.execute(
+                            f"INSERT INTO {SCHEMA}.dividends (user_id, amount) VALUES (%s, %s) RETURNING id",
+                            (uid, amount)
+                        )
+                    else:
+                        # Списываем как вывод с методом admin_adjust
+                        cur.execute(
+                            f"INSERT INTO {SCHEMA}.withdrawals (user_id, amount, method, status, details) "
+                            "VALUES (%s, %s, 'admin_adjust', 'completed', %s) RETURNING id",
+                            (uid, abs(amount), json.dumps({'comment': comment, 'admin_id': user['id']}))
+                        )
+                    adj_id = cur.fetchone()[0]
+                    conn.commit()
+                return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({
+                    'ok': True, 'adj_id': adj_id,
+                    'user_name': target[1], 'user_email': target[2],
+                    'amount': amount
+                })}
 
             return {'statusCode': 404, 'headers': CORS, 'body': json.dumps({'error': 'Not found'})}
 

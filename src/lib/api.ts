@@ -194,6 +194,13 @@ export async function apiAdminToggleAdmin(id: number) {
   return json as { ok: boolean; is_admin: boolean }
 }
 
+export async function apiAdminAdjustBalance(user_id: number, amount: number, comment: string) {
+  const res = await fetch(PROFILE_URL + '?action=admin-adjust-balance', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ user_id, amount, comment }) })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || 'Ошибка')
+  return json as { ok: boolean; user_name: string; user_email: string; amount: number }
+}
+
 export interface AdminUser {
   id: number; name: string; email: string; referral_code: string
   is_admin: boolean; created_at: string; deposit: number
