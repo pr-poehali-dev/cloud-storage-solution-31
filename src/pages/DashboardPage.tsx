@@ -8,6 +8,23 @@ import { useAuth } from '@/context/AuthContext'
 import { apiGetBoosts, apiCreateBoost, apiGetWheelSpins, type WheelSpin } from '@/lib/api'
 import FortuneWheel from '@/components/FortuneWheel'
 
+function useOnlineCount() {
+  const [count, setCount] = useState(0)
+  useEffect(() => {
+    const base = Math.floor(Math.random() * (590 - 250 + 1)) + 250
+    setCount(base)
+    const iv = setInterval(() => {
+      setCount(prev => {
+        const delta = Math.floor(Math.random() * 7) - 3
+        const next = prev + delta
+        return Math.max(250, Math.min(590, next))
+      })
+    }, 4000)
+    return () => clearInterval(iv)
+  }, [])
+  return count
+}
+
 const WEEKLY_SECONDS = 7 * 24 * 3600
 const ANCHOR_KEY = 'div_anchor'
 
@@ -51,6 +68,7 @@ type BoostItem = { id: number; amount: number; bonus_pct: number; created_at: st
 export default function DashboardPage() {
   const { user, loading, logout, refresh } = useAuth()
   const navigate = useNavigate()
+  const onlineCount = useOnlineCount()
   const [tick, setTick] = useState(0)
   const [copied, setCopied] = useState(false)
 
@@ -158,7 +176,20 @@ export default function DashboardPage() {
               <p className="text-neutral-500 text-xs mt-0.5">{user?.email ?? ''}</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Онлайн-счётчик */}
+            <div className="flex items-center gap-1.5 bg-green-500/8 border border-green-500/20 rounded-xl px-3 py-1.5">
+              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-green-400 text-xs font-semibold tabular-nums">{onlineCount.toLocaleString('ru-RU')}</span>
+              <span className="text-green-600 text-xs">онлайн</span>
+            </div>
+
+            <Button variant="outline" size="sm" onClick={() => navigate('/chat')}
+              className="border-purple-500/30 text-purple-400 bg-purple-500/8 hover:bg-purple-500/15 hover:border-purple-500/50 text-xs relative">
+              <Icon name="MessageSquare" size={13} className="mr-1.5" /> Чат
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+            </Button>
+
             {user?.is_admin && (
               <Button variant="outline" size="sm" onClick={() => navigate('/admin')}
                 className="border-white/20 text-white bg-white/5 hover:bg-white/10 text-xs">

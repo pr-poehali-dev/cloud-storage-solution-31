@@ -89,6 +89,41 @@ export async function apiExchangeStats() {
   return json as { total_tx: number; p2p_done: number; volume_usdt: number; active_wallets: number }
 }
 
+// ── Chat API ───────────────────────────────────────────────────
+
+export type ChatMessage = { id: number; username: string; avatar_seed: string; message: string; is_bot: boolean; msg_type: string; created_at: string }
+export type SupportMessage = { id: number; role: string; message: string; created_at: string }
+
+export async function apiChatList(afterId?: number) {
+  const p = new URLSearchParams({ action: 'chat-list' })
+  if (afterId) p.set('after_id', String(afterId))
+  const res = await fetch(PROFILE_URL + '?' + p.toString(), { headers: authHeaders() })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || 'Ошибка')
+  return json as { messages: ChatMessage[] }
+}
+
+export async function apiChatSend(message: string) {
+  const res = await fetch(PROFILE_URL + '?action=chat-send', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ message }) })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || 'Ошибка')
+  return json as { ok: boolean; id: number; created_at: string }
+}
+
+export async function apiSupportHistory() {
+  const res = await fetch(PROFILE_URL + '?action=support-history', { headers: authHeaders() })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || 'Ошибка')
+  return json as { messages: SupportMessage[] }
+}
+
+export async function apiSupportSend(message: string) {
+  const res = await fetch(PROFILE_URL + '?action=support-send', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ message }) })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || 'Ошибка')
+  return json as { ok: boolean; user_msg: SupportMessage; bot_msg: SupportMessage }
+}
+
 // ── Wheel API ──────────────────────────────────────────────────
 
 export type WheelSegment = { label: string; mult: number; color: string }

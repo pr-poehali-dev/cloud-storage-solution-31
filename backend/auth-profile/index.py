@@ -796,6 +796,182 @@ def handler(event: dict, context) -> dict:
                     'bet': bet, 'win': multiplier > 0
                 })}
 
+        # ── CHAT ROUTES ───────────────────────────────────────────
+        if action_val.startswith('chat-') or '/chat' in path:
+            import json as _cj
+            import random as _cr
+
+            BOT_USERS = [
+                ('Алексей К.','ak'), ('Марина В.','mv'), ('Дмитрий Л.','dl'),
+                ('Ольга Т.','ot'), ('Сергей Р.','sr'), ('Наталья М.','nm'),
+                ('Иван Ф.','if'), ('Екатерина Б.','eb'), ('Артём Ж.','aj'),
+                ('Светлана П.','sp'), ('Роман Ч.','rc'), ('Юлия Н.','yn'),
+                ('Андрей О.','ao'), ('Вика Д.','vd'), ('Никита С.','ns'),
+            ]
+            REVIEW_MSGS = [
+                'Уже 3 месяца на платформе — дивиденды капают каждую неделю 🔥',
+                'Вывел вчера 15 000 ₽, всё пришло за 10 минут. Доволен!',
+                'P2P обменник удобный, сделал 3 обмена без проблем',
+                'Реферальная программа реально работает, получил бонус от друга',
+                'Буст на 5% поставил — разница ощутимая, советую',
+                'Колесо фортуны выиграл ×2 с первого раза 😁',
+                'Платформа развивается, видно что команда работает',
+                'Поддержка ответила быстро, спасибо!',
+                'Уже полгода здесь, никаких проблем с выводом',
+                'Депозит подтвердили за час, всё честно',
+                'Хорошая доходность для пассивного дохода',
+                'Рекомендую всем своим знакомым 👍',
+                'Интерфейс стал намного лучше после обновления',
+                'Дивиденды начисляются автоматически, удобно',
+                'Зарегистрировался по реферальной ссылке — уже в плюсе',
+            ]
+            COMPLAINT_MSGS = [
+                'Хотелось бы мобильное приложение для iOS',
+                'Добавьте больше криптовалют в обменник',
+                'Верификация документов немного затянулась, жду',
+                'Хотелось бы больше способов пополнения',
+                'Кнопка "история транзакций" была бы удобнее',
+                'Иногда страница загружается медленно',
+            ]
+
+            def _seed_bots(conn):
+                with conn.cursor() as cur:
+                    cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.chat_messages WHERE created_at > NOW() - INTERVAL '6 hours'")
+                    cnt = cur.fetchone()[0]
+                if cnt >= 25:
+                    return
+                msgs = []
+                for i in range(35):
+                    is_complaint = _cr.random() < 0.12
+                    bot = _cr.choice(BOT_USERS)
+                    text = _cr.choice(COMPLAINT_MSGS if is_complaint else REVIEW_MSGS)
+                    secs = _cr.randint(0, 21000)
+                    msgs.append((bot[0], bot[1], text, True, 'complaint' if is_complaint else 'review', secs))
+                with conn.cursor() as cur:
+                    for m in msgs:
+                        cur.execute(
+                            f"INSERT INTO {SCHEMA}.chat_messages (username,avatar_seed,message,is_bot,msg_type,created_at) "
+                            f"VALUES (%s,%s,%s,%s,%s, NOW() - INTERVAL '{m[5]} seconds')",
+                            m[:5]
+                        )
+                conn.commit()
+
+            _seed_bots(conn)
+
+            # GET chat-list — последние сообщения
+            if action_val == 'chat-list' or (http_method == 'GET' and '/chat' in path and 'support' not in path):
+                qs2 = event.get('queryStringParameters') or {}
+                after_id = qs2.get('after_id')
+                with conn.cursor() as cur:
+                    if after_id:
+                        cur.execute(
+                            f"SELECT id,username,avatar_seed,message,is_bot,msg_type,created_at "
+                            f"FROM {SCHEMA}.chat_messages WHERE id > %s ORDER BY id DESC LIMIT 50",
+                            (int(after_id),)
+                        )
+                    else:
+                        cur.execute(
+                            f"SELECT id,username,avatar_seed,message,is_bot,msg_type,created_at "
+                            f"FROM {SCHEMA}.chat_messages ORDER BY id DESC LIMIT 50"
+                        )
+                    rows = cur.fetchall()
+                msgs_out = [{'id': r[0],'username': r[1],'avatar_seed': r[2],'message': r[3],
+                             'is_bot': r[4],'msg_type': r[5],'created_at': str(r[6])} for r in rows]
+                return {'statusCode': 200, 'headers': CORS, 'body': _cj.dumps({'messages': msgs_out})}
+
+            # POST chat-send — отправить сообщение (только авторизованные)
+            if action_val == 'chat-send' or http_method == 'POST':
+                body = _cj.loads(event.get('body') or '{}')
+                text = (body.get('message') or '').strip()[:500]
+                if not text:
+                    return {'statusCode': 400, 'headers': CORS, 'body': _cj.dumps({'error': 'Пустое сообщение'})}
+                name = user.get('name') or user.get('email', '').split('@')[0]
+                with conn.cursor() as cur:
+                    cur.execute(
+                        f"INSERT INTO {SCHEMA}.chat_messages (user_id,username,avatar_seed,message,is_bot,msg_type) "
+                        "VALUES (%s,%s,%s,%s,false,'user') RETURNING id,created_at",
+                        (user['id'], name[:64], str(user['id']), text)
+                    )
+                    row = cur.fetchone()
+                    conn.commit()
+                return {'statusCode': 200, 'headers': CORS, 'body': _cj.dumps({
+                    'ok': True, 'id': row[0], 'created_at': str(row[1])
+                })}
+
+        # ── SUPPORT ROUTES ────────────────────────────────────────
+        if action_val.startswith('support-') or '/support' in path:
+            import json as _sj
+            import hashlib as _sh
+
+            SUPPORT_ANSWERS = {
+                'вывод': 'Вывод средств обрабатывается в течение 1–24 часов в рабочие дни. Если прошло больше — напишите в тикет-систему на poehali.dev/help',
+                'депозит': 'Пополнение подтверждается автоматически после 1 подтверждения в сети. Обычно занимает 10–30 минут.',
+                'буст': 'Буст увеличивает вашу недельную ставку дивидендов. От 5 000 ₽ — +5%, от 100 000 ₽ — +10%. Эффект суммируется!',
+                'реферал': 'За каждого приглашённого друга вы получаете 5% от его депозита еженедельно. Делитесь реферальной ссылкой из личного кабинета.',
+                'колесо': 'Колесо Фортуны доступно от 100 ₽ с баланса. Шанс выигрыша — 20%. Призы: ×2, ×5, ×10 к ставке.',
+                'обменник': 'P2P Обменник позволяет обменивать RUB, USDT, BTC, ETH, BNB, USDC напрямую с другими пользователями без посредников.',
+                'верификация': 'Верификация аккаунта требует загрузки паспорта и селфи. Срок проверки — до 48 часов.',
+                'дивиденды': 'Дивиденды начисляются каждую секунду и отображаются в реальном времени в личном кабинете. Выплата происходит еженедельно.',
+                'пароль': 'Для смены пароля перейдите в настройки профиля или обратитесь в поддержку на poehali.dev/help',
+                'помощь': 'Я могу помочь по темам: вывод, депозит, дивиденды, буст, реферал, колесо, обменник. Напишите свой вопрос!',
+            }
+            DEFAULT_ANSWER = 'Понял ваш вопрос! Для детальной помощи обратитесь в нашу тикет-систему: https://poehali.dev/help — операторы ответят в течение часа в рабочее время.'
+
+            session_key = headers.get('X-Session-Id', '') + '_support'
+
+            # GET — история диалога
+            if action_val == 'support-history' or http_method == 'GET':
+                with conn.cursor() as cur:
+                    cur.execute(
+                        f"SELECT id,role,message,created_at FROM {SCHEMA}.support_messages "
+                        "WHERE session_key=%s ORDER BY created_at ASC LIMIT 50",
+                        (session_key,)
+                    )
+                    rows = cur.fetchall()
+                if not rows:
+                    # Приветствие
+                    welcome = 'Привет! 👋 Я бот поддержки ADFUND. Чем могу помочь? Спросите про: вывод, депозит, дивиденды, буст, реферал, колесо фортуны или обменник.'
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            f"INSERT INTO {SCHEMA}.support_messages (session_key,user_id,role,message) VALUES (%s,%s,'bot',%s)",
+                            (session_key, user['id'], welcome)
+                        )
+                        conn.commit()
+                    rows = [(1, 'bot', welcome, 'now')]
+                msgs_out = [{'id': r[0],'role': r[1],'message': r[2],'created_at': str(r[3])} for r in rows]
+                return {'statusCode': 200, 'headers': CORS, 'body': _sj.dumps({'messages': msgs_out})}
+
+            # POST — отправить сообщение и получить ответ бота
+            if action_val == 'support-send' or http_method == 'POST':
+                body = _sj.loads(event.get('body') or '{}')
+                text = (body.get('message') or '').strip()[:500]
+                if not text:
+                    return {'statusCode': 400, 'headers': CORS, 'body': _sj.dumps({'error': 'Пустое сообщение'})}
+                with conn.cursor() as cur:
+                    cur.execute(
+                        f"INSERT INTO {SCHEMA}.support_messages (session_key,user_id,role,message) VALUES (%s,%s,'user',%s) RETURNING id,created_at",
+                        (session_key, user['id'], text)
+                    )
+                    user_row = cur.fetchone()
+                    # Подбираем ответ
+                    tl = text.lower()
+                    answer = DEFAULT_ANSWER
+                    for kw, ans in SUPPORT_ANSWERS.items():
+                        if kw in tl:
+                            answer = ans
+                            break
+                    cur.execute(
+                        f"INSERT INTO {SCHEMA}.support_messages (session_key,user_id,role,message) VALUES (%s,%s,'bot',%s) RETURNING id,created_at",
+                        (session_key, user['id'], answer)
+                    )
+                    bot_row = cur.fetchone()
+                    conn.commit()
+                return {'statusCode': 200, 'headers': CORS, 'body': _sj.dumps({
+                    'ok': True,
+                    'user_msg': {'id': user_row[0], 'role': 'user', 'message': text, 'created_at': str(user_row[1])},
+                    'bot_msg':  {'id': bot_row[0],  'role': 'bot',  'message': answer, 'created_at': str(bot_row[1])},
+                })}
+
         # ── PROFILE ROUTE ─────────────────────────────────────────
         with conn.cursor() as cur:
             cur.execute(
