@@ -53,7 +53,10 @@ def handler(event: dict, context) -> dict:
     headers = event.get('headers') or {}
     path = event.get('path', '/')
 
-    # POST /logout
+    # POST /logout (поддержка и ?action=logout и /logout)
+    qs = event.get('queryStringParameters') or {}
+    if qs.get('action') == 'logout':
+        path = '/logout'
     if method == 'POST' and path.endswith('/logout'):
         session_id = headers.get('X-Session-Id', '')
         if session_id:

@@ -141,7 +141,7 @@ export default function DashboardPage() {
     }
   }
 
-  const handleLogout = async () => { await logout(); navigate('/') }
+  const handleLogout = () => { logout(); navigate('/') }
   const copyRefLink = () => {
     if (!user) return
     navigator.clipboard.writeText(`${window.location.origin}/register?ref=${user.referral_code}`)

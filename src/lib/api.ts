@@ -28,7 +28,9 @@ export async function apiLogin(data: { email: string; password: string }) {
 }
 
 export async function apiLogout() {
-  await fetch(LOGIN_URL + '/logout', { method: 'POST', headers: authHeaders() })
+  try {
+    await fetch(LOGIN_URL + '?action=logout', { method: 'POST', headers: authHeaders() })
+  } catch { /* ignore network errors — always clear local session */ }
   localStorage.removeItem('session_id')
 }
 
