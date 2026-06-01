@@ -148,6 +148,19 @@ def handle_exchange(conn, http_method, path, session_id, event, user):
             bals[coin] = float(get_crypto_bal(conn, user['id'], coin))
         return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'balances': bals})}
 
+    # ── GET /exchange/admin-balances?user_id=X (только админ) ────
+    if http_method == 'GET' and sub == '/admin-balances':
+        if not user.get('is_admin'):
+            return {'statusCode': 403, 'headers': CORS, 'body': json.dumps({'error': 'Только для администраторов'})}
+        qs = event.get('queryStringParameters') or {}
+        target_uid = int(qs.get('user_id', 0))
+        if not target_uid:
+            return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Не указан user_id'})}
+        bals = {'RUB': float(get_rub_balance_ex(conn, target_uid))}
+        for coin in COINS:
+            bals[coin] = float(get_crypto_bal(conn, target_uid, coin))
+        return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'balances': bals})}
+
     # ── GET /exchange/my ─────────────────────────────────────────
     if http_method == 'GET' and sub == '/my':
         with conn.cursor(cursor_factory=RealDictCursor) as cur:

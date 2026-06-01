@@ -211,3 +211,10 @@ export async function apiAdminExchangeOrders() {
   if (!res.ok) throw new Error(json.error || 'Ошибка')
   return json as { orders: ExchangeOrder[] }
 }
+
+export async function apiAdminUserBalances(user_id: number) {
+  const res = await fetch(PROFILE_URL + `/exchange/admin-balances?user_id=${user_id}`, { headers: authHeaders() })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || 'Ошибка')
+  return json as { balances: Record<string, number> }
+}

@@ -6,11 +6,13 @@ import { Badge } from '@/components/ui/badge'
 import Icon from '@/components/ui/icon'
 import { useAuth } from '@/context/AuthContext'
 import { Input } from '@/components/ui/input'
+import { AnimatePresence, motion as m } from 'framer-motion'
 import {
   apiAdminUsers, apiAdminDeposits, apiAdminWithdrawals,
   apiAdminApproveWithdrawal, apiAdminRejectWithdrawal,
   apiAdminConfirmDeposit, apiAdminToggleAdmin,
   apiAdminDepositCrypto, apiAdminExchangeOrders, apiExchangeCancel,
+  apiAdminUserBalances,
   type AdminUser, type AdminDeposit, type AdminWithdrawal, type ExchangeOrder
 } from '@/lib/api'
 
@@ -63,6 +65,9 @@ export default function AdminPage() {
   const [depAmount, setDepAmount] = useState('')
   const [depLoading, setDepLoading] = useState(false)
   const [depMsg, setDepMsg] = useState('')
+  // Модалка крипто-балансов
+  const [balModal, setBalModal] = useState<{ user: AdminUser; balances: Record<string, number> } | null>(null)
+  const [balLoading, setBalLoading] = useState<number | null>(null)
 
   useEffect(() => {
     if (!loading && (!user || !user.is_admin)) navigate('/')
@@ -291,7 +296,7 @@ export default function AdminPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-white/5 text-neutral-400">
                     <tr>
-                      {['ID', 'Пользователь', 'Депозит', 'Дивиденды', 'Рефералы', 'Баланс', 'Ставка', 'Зарегистрирован', 'Права'].map(h => (
+                      {['ID', 'Пользователь', 'Депозит', 'Дивиденды', 'Рефералы', 'Баланс', 'Ставка', 'Зарегистрирован', 'Крипта', 'Права'].map(h => (
                         <th key={h} className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">{h}</th>
                       ))}
                     </tr>
@@ -320,6 +325,23 @@ export default function AdminPage() {
                         <td className="px-4 py-3 text-[#FF4D00] font-semibold">{fmt(u.balance)} ₽</td>
                         <td className="px-4 py-3 text-neutral-300">{u.deposit > 100000 ? '15%' : '10%'}/нед</td>
                         <td className="px-4 py-3 text-neutral-500 text-xs whitespace-nowrap">{fmtDate(u.created_at)}</td>
+                        <td className="px-4 py-3">
+                          <Button size="sm" variant="outline" disabled={balLoading === u.id}
+                            className="border-purple-500/30 text-purple-400 hover:bg-purple-500/10 bg-transparent h-7 px-2.5 text-xs"
+                            onClick={async () => {
+                              setBalLoading(u.id)
+                              try {
+                                const res = await apiAdminUserBalances(u.id)
+                                setBalModal({ user: u, balances: res.balances })
+                              } catch (e: unknown) {
+                                setError(e instanceof Error ? e.message : 'Ошибка')
+                              } finally { setBalLoading(null) }
+                            }}>
+                            {balLoading === u.id
+                              ? <span className="w-3 h-3 border-2 border-purple-400/30 border-t-purple-400 rounded-full animate-spin" />
+                              : <><Icon name="Wallet" size={12} className="mr-1" /> Крипта</>}
+                          </Button>
+                        </td>
                         <td className="px-4 py-3">
                           <Button size="sm" variant="outline" disabled={actionId === u.id}
                             className="border-white/20 text-neutral-300 hover:bg-white/10 bg-transparent h-7 px-2.5 text-xs"
@@ -438,6 +460,100 @@ export default function AdminPage() {
           </motion.div>
         )}
       </div>
+
+      {/* Модалка крипто-балансов */}
+      <AnimatePresence>
+        {balModal && (
+          <m.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+            onClick={() => setBalModal(null)}
+          >
+            <m.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.2 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-[#111] border border-white/15 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
+            >
+              {/* Заголовок */}
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h3 className="text-white font-semibold">{balModal.user.name}</h3>
+                  <p className="text-neutral-500 text-xs mt-0.5">{balModal.user.email} · #{balModal.user.id}</p>
+                </div>
+                <button onClick={() => setBalModal(null)}
+                  className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-neutral-400 hover:text-white transition-colors">
+                  <Icon name="X" size={15} />
+                </button>
+              </div>
+
+              {/* Балансы */}
+              <div className="space-y-2 mb-5">
+                {['RUB', 'USDT', 'BTC', 'ETH', 'BNB', 'USDC'].map(cur => {
+                  const val = balModal.balances[cur] ?? 0
+                  const isZero = val === 0
+                  return (
+                    <div key={cur} className={`flex items-center justify-between px-4 py-2.5 rounded-xl border ${
+                      isZero ? 'bg-white/3 border-white/5' : 'bg-white/5 border-white/10'
+                    }`}>
+                      <span className={`text-sm font-medium ${isZero ? 'text-neutral-600' : COIN_COLORS[cur] || 'text-white'}`}>{cur}</span>
+                      <span className={`font-mono text-sm ${isZero ? 'text-neutral-700' : 'text-white font-semibold'}`}>
+                        {cur === 'RUB' ? val.toFixed(2) : val.toFixed(6)}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Быстрое зачисление */}
+              <div className="border-t border-white/10 pt-4">
+                <p className="text-neutral-400 text-xs mb-3 flex items-center gap-1.5">
+                  <Icon name="PlusCircle" size={12} className="text-[#FF4D00]" /> Быстрое зачисление
+                </p>
+                <div className="flex gap-2">
+                  <select
+                    value={depCoin} onChange={e => setDepCoin(e.target.value)}
+                    className="bg-white/5 border border-white/10 text-white text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#FF4D00] flex-shrink-0">
+                    {COINS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <Input
+                    value={depAmount} onChange={e => setDepAmount(e.target.value)}
+                    placeholder="Сумма" type="number" step="any"
+                    className="bg-white/5 border-white/20 text-white placeholder:text-neutral-600 focus:border-[#FF4D00] h-8 text-xs" />
+                  <Button size="sm" disabled={depLoading}
+                    className="bg-[#FF4D00] hover:bg-[#e64500] text-white border-0 h-8 px-3 text-xs shrink-0"
+                    onClick={async () => {
+                      setDepMsg('')
+                      setDepLoading(true)
+                      try {
+                        await apiAdminDepositCrypto({ user_id: balModal.user.id, coin: depCoin, amount: Number(depAmount) })
+                        // Обновляем балансы в модалке
+                        const res = await apiAdminUserBalances(balModal.user.id)
+                        setBalModal(prev => prev ? { ...prev, balances: res.balances } : null)
+                        setDepAmount('')
+                        setDepMsg('✓')
+                        setTimeout(() => setDepMsg(''), 2000)
+                      } catch (e: unknown) {
+                        setDepMsg(e instanceof Error ? e.message : 'Ошибка')
+                      } finally { setDepLoading(false) }
+                    }}>
+                    {depLoading
+                      ? <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      : '+ Начислить'}
+                  </Button>
+                </div>
+                {depMsg && (
+                  <p className={`text-xs mt-2 ${depMsg === '✓' ? 'text-green-400' : 'text-red-400'}`}>{depMsg}</p>
+                )}
+              </div>
+            </m.div>
+          </m.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
