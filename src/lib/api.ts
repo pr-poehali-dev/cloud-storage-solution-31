@@ -54,14 +54,14 @@ export async function apiGetWithdrawals() {
 }
 
 export async function apiGetBoosts() {
-  const res = await fetch(PROFILE_URL + '/boost', { headers: authHeaders() })
+  const res = await fetch(PROFILE_URL + '?action=boost-list', { headers: authHeaders() })
   const json = await res.json()
   if (!res.ok) throw new Error(json.error || 'Ошибка')
   return json as { boosts: Array<{ id: number; amount: number; bonus_pct: number; created_at: string }>; boost_percent: number }
 }
 
 export async function apiCreateBoost(amount: number) {
-  const res = await fetch(PROFILE_URL + '/boost', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ amount }) })
+  const res = await fetch(PROFILE_URL + '?action=boost-create', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ amount }) })
   const json = await res.json()
   if (!res.ok) throw new Error(json.error || 'Ошибка')
   return json as { ok: boolean; boost_id: number; bonus_pct: number }
@@ -73,14 +73,14 @@ export type WheelSegment = { label: string; mult: number; color: string }
 export type WheelSpin = { id: number; bet: number; multiplier: number; win_amount: number; segment: string; created_at: string }
 
 export async function apiGetWheelSpins() {
-  const res = await fetch(PROFILE_URL + '/wheel', { headers: authHeaders() })
+  const res = await fetch(PROFILE_URL + '?action=wheel-list', { headers: authHeaders() })
   const json = await res.json()
   if (!res.ok) throw new Error(json.error || 'Ошибка')
   return json as { spins: WheelSpin[]; segments: WheelSegment[] }
 }
 
 export async function apiSpinWheel(bet: number) {
-  const res = await fetch(PROFILE_URL + '/wheel', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ bet }) })
+  const res = await fetch(PROFILE_URL + '?action=wheel-spin', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ bet }) })
   const json = await res.json()
   if (!res.ok) throw new Error(json.error || 'Ошибка')
   return json as { ok: boolean; spin_id: number; seg_idx: number; segment: string; multiplier: number; win_amount: number; bet: number; win: boolean }

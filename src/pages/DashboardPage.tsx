@@ -258,7 +258,7 @@ export default function DashboardPage() {
 
         {/* ── Actions ────────────────────────────────────────── */}
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-          className="grid grid-cols-3 md:grid-cols-6 gap-3">
+          className="grid grid-cols-4 gap-3">
           {[
             { label: 'Пополнить', icon: 'PlusCircle', action: () => navigate('/deposit'), style: 'bg-[#FF4D00]/10 border-[#FF4D00]/30 hover:bg-[#FF4D00]/20 hover:border-[#FF4D00]/50', iconBg: 'bg-[#FF4D00]', iconColor: 'text-white' },
             { label: 'Вывести', icon: 'ArrowUpFromLine', action: () => navigate('/withdraw'), style: 'bg-white/3 border-white/10 hover:bg-white/6 hover:border-white/20', iconBg: 'bg-white/10', iconColor: 'text-white' },
@@ -273,26 +273,6 @@ export default function DashboardPage() {
               <span className="text-white text-xs font-medium">{btn.label}</span>
             </button>
           ))}
-
-          {/* Wheel button */}
-          <button onClick={() => setShowWheel(true)}
-            className="group flex flex-col items-center gap-2 p-4 rounded-2xl border bg-gradient-to-b from-purple-600/15 to-pink-600/10 border-purple-500/30 hover:from-purple-600/25 hover:border-purple-500/50 transition-all relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/5 pointer-events-none" />
-            <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg shadow-purple-500/30">
-              <Icon name="Dices" size={16} className="text-white" />
-            </div>
-            <span className="relative text-pink-400 text-xs font-bold">Колесо</span>
-          </button>
-
-          {/* Boost button */}
-          <button onClick={() => setShowBoost(true)}
-            className="group flex flex-col items-center gap-2 p-4 rounded-2xl border bg-gradient-to-b from-yellow-500/15 to-orange-600/10 border-yellow-500/30 hover:from-yellow-500/25 hover:border-yellow-500/50 transition-all relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-yellow-400/5 to-transparent pointer-events-none" />
-            <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg shadow-yellow-500/30">
-              <Icon name="Zap" size={16} className="text-white" />
-            </div>
-            <span className="relative text-yellow-400 text-xs font-bold">Буст</span>
-          </button>
         </motion.div>
 
         {/* ── Charts Row ─────────────────────────────────────── */}
@@ -369,6 +349,60 @@ export default function DashboardPage() {
               </ResponsiveContainer>
             </div>
           </div>
+        </motion.div>
+
+        {/* ── Wheel & Boost Banners ───────────────────────────── */}
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.23 }}
+          className="grid md:grid-cols-2 gap-4">
+
+          {/* Колесо фортуны */}
+          <button onClick={() => setShowWheel(true)}
+            className="group relative overflow-hidden rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-900/30 via-pink-900/20 to-[#080808] p-5 text-left hover:border-purple-500/50 transition-all">
+            <div className="absolute -right-6 -top-6 w-32 h-32 rounded-full bg-purple-500/10 blur-2xl pointer-events-none group-hover:bg-purple-500/20 transition-all" />
+            <div className="absolute -right-2 -bottom-2 text-7xl opacity-10 select-none pointer-events-none">🎡</div>
+            <div className="relative z-10 flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/30 shrink-0 group-hover:scale-110 transition-transform">
+                <Icon name="Dices" size={22} className="text-white" />
+              </div>
+              <div>
+                <p className="text-white font-bold text-base">Колесо Фортуны</p>
+                <p className="text-neutral-400 text-xs mt-0.5 leading-relaxed">Крути от 100 ₽ и выигрывай ×2, ×5 или ×10 к ставке</p>
+                <div className="flex gap-2 mt-3">
+                  {['×2', '×5', '×10'].map((m, i) => (
+                    <span key={i} className={`text-xs font-bold px-2 py-0.5 rounded-full border ${
+                      i === 0 ? 'bg-green-500/15 border-green-500/25 text-green-400' :
+                      i === 1 ? 'bg-yellow-500/15 border-yellow-500/25 text-yellow-400' :
+                      'bg-red-500/15 border-red-500/25 text-red-400'
+                    }`}>{m}</span>
+                  ))}
+                  <span className="text-neutral-600 text-xs py-0.5">20% шанс</span>
+                </div>
+              </div>
+            </div>
+          </button>
+
+          {/* Буст */}
+          <button onClick={() => setShowBoost(true)}
+            className="group relative overflow-hidden rounded-2xl border border-yellow-500/30 bg-gradient-to-br from-yellow-900/20 via-orange-900/15 to-[#080808] p-5 text-left hover:border-yellow-500/50 transition-all">
+            <div className="absolute -right-6 -top-6 w-32 h-32 rounded-full bg-yellow-500/10 blur-2xl pointer-events-none group-hover:bg-yellow-500/20 transition-all" />
+            <div className="absolute -right-2 -bottom-2 text-7xl opacity-10 select-none pointer-events-none">⚡</div>
+            <div className="relative z-10 flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-lg shadow-yellow-500/30 shrink-0 group-hover:scale-110 transition-transform">
+                <Icon name="Zap" size={22} className="text-white" />
+              </div>
+              <div>
+                <p className="text-white font-bold text-base">Буст аккаунта</p>
+                <p className="text-neutral-400 text-xs mt-0.5 leading-relaxed">Прокачай ставку дивидендов на +5% или +10%</p>
+                <div className="flex gap-2 mt-3">
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full border bg-yellow-500/15 border-yellow-500/25 text-yellow-400">от 5 000 ₽ → +5%</span>
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full border bg-orange-500/15 border-orange-500/25 text-orange-400">от 100к ₽ → +10%</span>
+                </div>
+                {boostPercent > 0 && (
+                  <p className="text-green-400 text-xs mt-2 font-semibold">Активно: +{boostPercent}% к ставке</p>
+                )}
+              </div>
+            </div>
+          </button>
         </motion.div>
 
         {/* ── Boost History ───────────────────────────────────── */}

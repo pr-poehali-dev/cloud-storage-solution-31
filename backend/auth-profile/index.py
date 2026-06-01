@@ -349,7 +349,9 @@ def handler(event: dict, context) -> dict:
     try:
         # ── EXCHANGE ROUTES (публичный GET доступен без сессии) ───
         qs_check = event.get('queryStringParameters') or {}
-        if '/exchange' in path or 'action' in qs_check:
+        action_val = qs_check.get('action', '')
+        is_exchange = '/exchange' in path or action_val.startswith('exchange-')
+        if is_exchange:
             user = None
             if session_id:
                 user = get_session_user(conn, session_id)
@@ -501,7 +503,9 @@ def handler(event: dict, context) -> dict:
             return {'statusCode': 404, 'headers': CORS, 'body': json.dumps({'error': 'Not found'})}
 
         # ── BOOST ROUTES ──────────────────────────────────────────
-        if '/boost' in path:
+        if '/boost' in path or action_val.startswith('boost-'):
+            if action_val == 'boost-create':
+                http_method = 'POST'
             # GET /boost — история бустов пользователя
             if http_method == 'GET':
                 with conn.cursor() as cur:
@@ -562,7 +566,7 @@ def handler(event: dict, context) -> dict:
                 return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True, 'boost_id': boost_id, 'bonus_pct': bonus_pct})}
 
         # ── WHEEL ROUTES ──────────────────────────────────────────
-        if '/wheel' in path:
+        if '/wheel' in path or action_val.startswith('wheel-'):
             import json as _json
             import random as _random
 
@@ -588,6 +592,8 @@ def handler(event: dict, context) -> dict:
                 {'label': '💀',   'mult': 0.0,  'color': '#374151'},
             ]
 
+            if action_val == 'wheel-spin':
+                http_method = 'POST'
             # GET /wheel — история последних спинов
             if http_method == 'GET':
                 with conn.cursor() as cur:
