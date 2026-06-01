@@ -321,7 +321,7 @@ export default function LandingPage() {
             transition={{ duration: 0.6 }} className="mb-12">
             <p className="text-[#FF4D00] text-sm font-semibold uppercase tracking-widest mb-3">Рынок</p>
             <h2 className="text-4xl md:text-5xl font-black text-white leading-tight">Крипто-рынок</h2>
-            <p className="text-neutral-400 mt-4 text-lg max-w-2xl">Актуальные котировки ведущих криптовалют в реальном времени.</p>
+            <p className="text-neutral-400 mt-4 text-lg max-w-2xl"></p>
           </motion.div>
           <CryptoSection isActive={true} />
         </div>
