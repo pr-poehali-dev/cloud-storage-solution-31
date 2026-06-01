@@ -489,6 +489,18 @@ def handler(event: dict, context) -> dict:
             return {'statusCode': 401, 'headers': CORS, 'body': json.dumps({'error': 'Сессия истекла'})}
 
         # ── ADMIN ROUTES ──────────────────────────────────────────
+        ADMIN_ACTION_MAP = {
+            'admin-users': ('GET', 'users'),
+            'admin-deposits': ('GET', 'deposits'),
+            'admin-withdrawals': ('GET', 'withdrawals'),
+            'admin-approve-withdrawal': ('POST', 'withdrawals/approve'),
+            'admin-reject-withdrawal': ('POST', 'withdrawals/reject'),
+            'admin-confirm-deposit': ('POST', 'deposits/confirm'),
+            'admin-toggle-admin': ('POST', 'users/toggle-admin'),
+        }
+        if action_val in ADMIN_ACTION_MAP:
+            http_method, admin_sub = ADMIN_ACTION_MAP[action_val]
+            path = '/admin/' + admin_sub
         if '/admin/' in path or path.endswith('/admin'):
             err = require_admin(user)
             if err:

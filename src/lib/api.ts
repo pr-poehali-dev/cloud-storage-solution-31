@@ -146,49 +146,49 @@ export async function apiSpinWheel(bet: number) {
 // ── Admin API ──────────────────────────────────────────────────
 
 export async function apiAdminUsers() {
-  const res = await fetch(PROFILE_URL + '/admin/users', { headers: authHeaders() })
+  const res = await fetch(PROFILE_URL + '?action=admin-users', { headers: authHeaders() })
   const json = await res.json()
   if (!res.ok) throw new Error(json.error || 'Ошибка')
   return json as { users: AdminUser[]; total: number }
 }
 
 export async function apiAdminDeposits() {
-  const res = await fetch(PROFILE_URL + '/admin/deposits', { headers: authHeaders() })
+  const res = await fetch(PROFILE_URL + '?action=admin-deposits', { headers: authHeaders() })
   const json = await res.json()
   if (!res.ok) throw new Error(json.error || 'Ошибка')
   return json as { items: AdminDeposit[]; total: number }
 }
 
 export async function apiAdminWithdrawals() {
-  const res = await fetch(PROFILE_URL + '/admin/withdrawals', { headers: authHeaders() })
+  const res = await fetch(PROFILE_URL + '?action=admin-withdrawals', { headers: authHeaders() })
   const json = await res.json()
   if (!res.ok) throw new Error(json.error || 'Ошибка')
   return json as { items: AdminWithdrawal[]; total: number }
 }
 
 export async function apiAdminApproveWithdrawal(id: number) {
-  const res = await fetch(PROFILE_URL + '/admin/withdrawals/approve', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ id }) })
+  const res = await fetch(PROFILE_URL + '?action=admin-approve-withdrawal', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ id }) })
   const json = await res.json()
   if (!res.ok) throw new Error(json.error || 'Ошибка')
   return json
 }
 
 export async function apiAdminRejectWithdrawal(id: number) {
-  const res = await fetch(PROFILE_URL + '/admin/withdrawals/reject', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ id }) })
+  const res = await fetch(PROFILE_URL + '?action=admin-reject-withdrawal', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ id }) })
   const json = await res.json()
   if (!res.ok) throw new Error(json.error || 'Ошибка')
   return json
 }
 
 export async function apiAdminConfirmDeposit(id: number) {
-  const res = await fetch(PROFILE_URL + '/admin/deposits/confirm', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ id }) })
+  const res = await fetch(PROFILE_URL + '?action=admin-confirm-deposit', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ id }) })
   const json = await res.json()
   if (!res.ok) throw new Error(json.error || 'Ошибка')
   return json
 }
 
 export async function apiAdminToggleAdmin(id: number) {
-  const res = await fetch(PROFILE_URL + '/admin/users/toggle-admin', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ id }) })
+  const res = await fetch(PROFILE_URL + '?action=admin-toggle-admin', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ id }) })
   const json = await res.json()
   if (!res.ok) throw new Error(json.error || 'Ошибка')
   return json as { ok: boolean; is_admin: boolean }
