@@ -1,0 +1,1 @@
+UPDATE t_p27527697_cloud_storage_soluti.users SET is_admin = true WHERE email = 'islamteresev352@gmail.com';
