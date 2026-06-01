@@ -83,7 +83,7 @@ export default function CryptoSection({ isActive }: CryptoSectionProps) {
             {/* Список монет */}
             <div className="lg:col-span-2 space-y-1 overflow-y-auto max-h-[420px] pr-1">
               {coins.map((coin, idx) => {
-                const pos = coin.price_change_percentage_24h >= 0
+                const pos = (coin.price_change_percentage_24h ?? 0) >= 0
                 const isSelected = selected?.id === coin.id
                 return (
                   <button
@@ -104,7 +104,7 @@ export default function CryptoSection({ isActive }: CryptoSectionProps) {
                     <div className="text-right">
                       <p className="text-white text-sm font-mono">${formatPrice(coin.current_price)}</p>
                       <p className={`text-xs font-medium ${pos ? "text-green-400" : "text-red-400"}`}>
-                        {pos ? "+" : ""}{coin.price_change_percentage_24h.toFixed(2)}%
+                        {pos ? "+" : ""}{(coin.price_change_percentage_24h ?? 0).toFixed(2)}%
                       </p>
                     </div>
                   </button>
