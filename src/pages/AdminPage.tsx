@@ -1,12 +1,11 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import Icon from '@/components/ui/icon'
 import { useAuth } from '@/context/AuthContext'
 import { Input } from '@/components/ui/input'
-import { AnimatePresence, motion as m } from 'framer-motion'
 import {
   apiAdminUsers, apiAdminDeposits, apiAdminWithdrawals,
   apiAdminApproveWithdrawal, apiAdminRejectWithdrawal,
@@ -464,14 +463,14 @@ export default function AdminPage() {
       {/* Модалка крипто-балансов */}
       <AnimatePresence>
         {balModal && (
-          <m.div
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
             onClick={() => setBalModal(null)}
           >
-            <m.div
+            <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -550,8 +549,8 @@ export default function AdminPage() {
                   <p className={`text-xs mt-2 ${depMsg === '✓' ? 'text-green-400' : 'text-red-400'}`}>{depMsg}</p>
                 )}
               </div>
-            </m.div>
-          </m.div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
