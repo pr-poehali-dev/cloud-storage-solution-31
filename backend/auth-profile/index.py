@@ -110,8 +110,25 @@ def refund_rub(conn, user_id: int, amount: Decimal):
 
 
 def handle_exchange(conn, http_method, path, session_id, event, user):
-    """Роутер P2P-обменника."""
-    sub = path[len('/exchange'):] or '/'   # /exchange/take → /take
+    """Роутер P2P-обменника через ?action=exchange-*"""
+    qs = event.get('queryStringParameters') or {}
+    action = qs.get('action', '')
+    # Маппинг action → sub
+    ACTION_MAP = {
+        'exchange-list': '/', 'exchange-balances': '/balances',
+        'exchange-my': '/my', 'exchange-create': '/',
+        'exchange-take': '/take', 'exchange-cancel': '/cancel',
+        'exchange-admin-deposit': '/admin-deposit',
+        'exchange-admin-balances': '/admin-balances',
+    }
+    if action in ACTION_MAP:
+        sub = ACTION_MAP[action]
+        if action == 'exchange-create':
+            http_method = 'POST'
+    elif '/exchange' in path:
+        sub = path[len('/exchange'):] or '/'
+    else:
+        sub = '/'
 
     # ── GET /exchange — публичный список заявок ───────────────────
     if http_method == 'GET' and sub == '/':
@@ -331,7 +348,8 @@ def handler(event: dict, context) -> dict:
     conn = get_conn()
     try:
         # ── EXCHANGE ROUTES (публичный GET доступен без сессии) ───
-        if '/exchange' in path:
+        qs_check = event.get('queryStringParameters') or {}
+        if '/exchange' in path or 'action' in qs_check:
             user = None
             if session_id:
                 user = get_session_user(conn, session_id)
