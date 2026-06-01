@@ -131,3 +131,69 @@ export async function apiProfile() {
     created_at: string
   }
 }
+
+// ── Exchange P2P API ──────────────────────────────────────────────────────────
+
+export interface ExchangeOrder {
+  id: number
+  user_id: number
+  creator_name: string
+  from_currency: string
+  from_amount: number
+  to_currency: string
+  to_amount: number
+  rate: number
+  status: 'open' | 'completed' | 'cancelled'
+  taker_user_id: number | null
+  taker_name: string | null
+  comment: string | null
+  created_at: string
+  completed_at: string | null
+  is_mine?: boolean
+}
+
+export async function apiExchangeOrders(params?: { from_currency?: string; to_currency?: string }) {
+  const qs = params ? '?' + new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString() : ''
+  const res = await fetch(PROFILE_URL + '/exchange' + qs, { headers: { 'X-Session-Id': getSession() } })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || 'Ошибка')
+  return json as { orders: ExchangeOrder[] }
+}
+
+export async function apiExchangeBalances() {
+  const res = await fetch(PROFILE_URL + '/exchange/balances', { headers: authHeaders() })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || 'Ошибка')
+  return json as { balances: Record<string, number> }
+}
+
+export async function apiExchangeMyOrders() {
+  const res = await fetch(PROFILE_URL + '/exchange/my', { headers: authHeaders() })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || 'Ошибка')
+  return json as { orders: ExchangeOrder[] }
+}
+
+export async function apiExchangeCreate(data: {
+  from_currency: string; from_amount: number
+  to_currency: string; to_amount: number; comment?: string
+}) {
+  const res = await fetch(PROFILE_URL + '/exchange', { method: 'POST', headers: authHeaders(), body: JSON.stringify(data) })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || 'Ошибка')
+  return json as { ok: boolean; order_id: number }
+}
+
+export async function apiExchangeTake(order_id: number) {
+  const res = await fetch(PROFILE_URL + '/exchange/take', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ order_id }) })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || 'Ошибка')
+  return json as { ok: boolean }
+}
+
+export async function apiExchangeCancel(order_id: number) {
+  const res = await fetch(PROFILE_URL + '/exchange/cancel', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ order_id }) })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || 'Ошибка')
+  return json as { ok: boolean }
+}

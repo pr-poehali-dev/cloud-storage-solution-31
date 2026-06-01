@@ -159,7 +159,7 @@ export default function DashboardPage() {
 
           {/* Actions */}
           <motion.div
-            className="grid grid-cols-3 gap-3 mb-4"
+            className="grid grid-cols-4 gap-3 mb-4"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
@@ -181,6 +181,15 @@ export default function DashboardPage() {
                 <Icon name="ArrowUpFromLine" size={18} className="text-white" />
               </div>
               <span className="text-white text-sm font-medium">Вывести</span>
+            </button>
+            <button
+              onClick={() => navigate('/exchange')}
+              className="group flex flex-col items-center gap-2 p-5 rounded-2xl bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/20 hover:border-purple-500/50 transition-all"
+            >
+              <div className="w-10 h-10 rounded-xl bg-purple-500/30 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Icon name="ArrowLeftRight" size={18} className="text-purple-300" />
+              </div>
+              <span className="text-purple-300 text-sm font-medium">Обменник</span>
             </button>
             <button
               onClick={() => refresh()}

@@ -1,17 +1,26 @@
 """
-Профиль пользователя + Admin API.
-GET / — профиль текущего пользователя
-GET /admin/users — список всех пользователей (только админ)
-GET /admin/deposits — все депозиты (только админ)
-GET /admin/withdrawals — все заявки на вывод (только админ)
-POST /admin/withdrawals/approve — подтвердить вывод вручную (только админ)
-POST /admin/withdrawals/reject — отклонить вывод (только админ)
-POST /admin/deposits/confirm — подтвердить депозит вручную (только админ)
-POST /admin/users/toggle-admin — выдать/снять права админа
+Профиль пользователя + Admin API + Exchange P2P.
+GET  /                         — профиль текущего пользователя
+GET  /exchange                 — список открытых заявок (публично)
+GET  /exchange/my              — мои заявки
+GET  /exchange/balances        — мои крипто-балансы
+POST /exchange                 — создать заявку
+POST /exchange/take            — принять заявку
+POST /exchange/cancel          — отменить заявку
+POST /exchange/admin-deposit   — зачислить крипту пользователю (только админ)
+GET  /admin/users              — список всех пользователей (только админ)
+GET  /admin/deposits           — все депозиты (только админ)
+GET  /admin/withdrawals        — все заявки на вывод (только админ)
+POST /admin/withdrawals/approve
+POST /admin/withdrawals/reject
+POST /admin/deposits/confirm
+POST /admin/users/toggle-admin
 """
 import json
 import os
+from decimal import Decimal, InvalidOperation
 import psycopg2
+from psycopg2.extras import RealDictCursor
 
 CORS = {
     'Access-Control-Allow-Origin': '*',
@@ -20,8 +29,258 @@ CORS = {
 }
 
 
+SCHEMA = 't_p27527697_cloud_storage_soluti'
+COINS = ['USDT', 'BTC', 'ETH', 'BNB', 'USDC']
+CURRENCIES = ['RUB'] + COINS
+
+
 def get_conn():
     return psycopg2.connect(os.environ['DATABASE_URL'])
+
+
+# ── Exchange helpers ───────────────────────────────────────────────────────────
+
+def get_rub_balance_ex(conn, user_id: int) -> Decimal:
+    with conn.cursor() as cur:
+        cur.execute(f"SELECT COALESCE(SUM(amount),0) FROM {SCHEMA}.dividends WHERE user_id=%s", (user_id,))
+        divs = Decimal(str(cur.fetchone()[0]))
+        cur.execute(f"SELECT COALESCE(SUM(amount),0) FROM {SCHEMA}.referral_payouts WHERE referrer_id=%s", (user_id,))
+        refs = Decimal(str(cur.fetchone()[0]))
+        cur.execute(
+            f"SELECT COALESCE(SUM(amount),0) FROM {SCHEMA}.withdrawals WHERE user_id=%s AND status IN ('pending','completed')",
+            (user_id,)
+        )
+        withdrawn = Decimal(str(cur.fetchone()[0]))
+        cur.execute(
+            f"SELECT COALESCE(SUM(from_amount),0) FROM {SCHEMA}.exchange_orders "
+            "WHERE user_id=%s AND from_currency='RUB' AND status='open'",
+            (user_id,)
+        )
+        locked = Decimal(str(cur.fetchone()[0]))
+        return divs + refs - withdrawn - locked
+
+
+def get_crypto_bal(conn, user_id: int, coin: str) -> Decimal:
+    with conn.cursor() as cur:
+        cur.execute(
+            f"SELECT COALESCE(amount,0) FROM {SCHEMA}.crypto_balances WHERE user_id=%s AND coin=%s",
+            (user_id, coin)
+        )
+        row = cur.fetchone()
+        return Decimal(str(row[0])) if row else Decimal('0')
+
+
+def adjust_crypto(conn, user_id: int, coin: str, delta: Decimal):
+    with conn.cursor() as cur:
+        cur.execute(
+            f"INSERT INTO {SCHEMA}.crypto_balances (user_id, coin, amount, updated_at) "
+            "VALUES (%s,%s,%s,NOW()) ON CONFLICT (user_id,coin) "
+            "DO UPDATE SET amount=crypto_balances.amount+EXCLUDED.amount, updated_at=NOW()",
+            (user_id, coin, float(delta))
+        )
+
+
+def deduct_rub(conn, user_id: int, amount: Decimal):
+    with conn.cursor() as cur:
+        cur.execute(
+            f"INSERT INTO {SCHEMA}.withdrawals (user_id,amount,method,details,status) "
+            "VALUES (%s,%s,'internal_exchange','{}','completed')",
+            (user_id, float(amount))
+        )
+
+
+def credit_rub(conn, user_id: int, amount: Decimal):
+    with conn.cursor() as cur:
+        cur.execute(
+            f"INSERT INTO {SCHEMA}.dividends (user_id,amount,week_start) "
+            "VALUES (%s,%s,DATE_TRUNC('week',NOW()))",
+            (user_id, float(amount))
+        )
+
+
+def refund_rub(conn, user_id: int, amount: Decimal):
+    with conn.cursor() as cur:
+        cur.execute(
+            f"DELETE FROM {SCHEMA}.withdrawals WHERE id=("
+            f"SELECT id FROM {SCHEMA}.withdrawals WHERE user_id=%s "
+            "AND method='internal_exchange' AND status='completed' AND amount=%s "
+            "ORDER BY id DESC LIMIT 1)",
+            (user_id, float(amount))
+        )
+
+
+def handle_exchange(conn, http_method, path, session_id, event, user):
+    """Роутер P2P-обменника."""
+    sub = path[len('/exchange'):] or '/'   # /exchange/take → /take
+
+    # ── GET /exchange — публичный список заявок ───────────────────
+    if http_method == 'GET' and sub == '/':
+        qs = event.get('queryStringParameters') or {}
+        fc = qs.get('from_currency', '')
+        tc = qs.get('to_currency', '')
+        conds = ["o.status='open'"]
+        params = []
+        if fc:
+            conds.append("o.from_currency=%s"); params.append(fc.upper())
+        if tc:
+            conds.append("o.to_currency=%s"); params.append(tc.upper())
+        where = ' AND '.join(conds)
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                f"SELECT o.*, u.name AS creator_name FROM {SCHEMA}.exchange_orders o "
+                f"JOIN {SCHEMA}.users u ON u.id=o.user_id WHERE {where} ORDER BY o.created_at DESC LIMIT 100",
+                params
+            )
+            orders = [dict(r) for r in cur.fetchall()]
+        uid = user['id'] if user else None
+        for o in orders:
+            o['is_mine'] = (o['user_id'] == uid)
+        return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'orders': orders}, default=str)}
+
+    # Остальные маршруты требуют авторизации
+    if not user:
+        return {'statusCode': 401, 'headers': CORS, 'body': json.dumps({'error': 'Не авторизован'})}
+
+    # ── GET /exchange/balances ────────────────────────────────────
+    if http_method == 'GET' and sub == '/balances':
+        bals = {'RUB': float(get_rub_balance_ex(conn, user['id']))}
+        for coin in COINS:
+            bals[coin] = float(get_crypto_bal(conn, user['id'], coin))
+        return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'balances': bals})}
+
+    # ── GET /exchange/my ─────────────────────────────────────────
+    if http_method == 'GET' and sub == '/my':
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                f"SELECT o.*, u.name AS taker_name FROM {SCHEMA}.exchange_orders o "
+                f"LEFT JOIN {SCHEMA}.users u ON u.id=o.taker_user_id "
+                "WHERE o.user_id=%s ORDER BY o.created_at DESC LIMIT 50",
+                (user['id'],)
+            )
+            orders = [dict(r) for r in cur.fetchall()]
+        return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'orders': orders}, default=str)}
+
+    # ── POST /exchange — создать заявку ──────────────────────────
+    if http_method == 'POST' and sub == '/':
+        body = json.loads(event.get('body') or '{}')
+        fc = (body.get('from_currency') or '').upper()
+        tc = (body.get('to_currency') or '').upper()
+        comment = (body.get('comment') or '')[:200]
+        if fc not in CURRENCIES or tc not in CURRENCIES:
+            return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': f'Допустимые валюты: {", ".join(CURRENCIES)}'})}
+        if fc == tc:
+            return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Нельзя обменять на ту же валюту'})}
+        try:
+            fa = Decimal(str(body.get('from_amount', 0)))
+            ta = Decimal(str(body.get('to_amount', 0)))
+        except InvalidOperation:
+            return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Неверные суммы'})}
+        if fa <= 0 or ta <= 0:
+            return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Суммы должны быть > 0'})}
+        avail = get_rub_balance_ex(conn, user['id']) if fc == 'RUB' else get_crypto_bal(conn, user['id'], fc)
+        if avail < fa:
+            return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': f'Недостаточно {fc}. Доступно: {float(avail):.8g}'})}
+        if fc == 'RUB':
+            deduct_rub(conn, user['id'], fa)
+        else:
+            adjust_crypto(conn, user['id'], fc, -fa)
+        rate = ta / fa
+        with conn.cursor() as cur:
+            cur.execute(
+                f"INSERT INTO {SCHEMA}.exchange_orders (user_id,from_currency,from_amount,to_currency,to_amount,rate,comment) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                (user['id'], fc, float(fa), tc, float(ta), float(rate), comment)
+            )
+            order_id = cur.fetchone()[0]
+        conn.commit()
+        return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True, 'order_id': order_id})}
+
+    # ── POST /exchange/take ───────────────────────────────────────
+    if http_method == 'POST' and sub == '/take':
+        body = json.loads(event.get('body') or '{}')
+        oid = int(body.get('order_id', 0))
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(f"SELECT * FROM {SCHEMA}.exchange_orders WHERE id=%s FOR UPDATE", (oid,))
+            order = cur.fetchone()
+        if not order:
+            return {'statusCode': 404, 'headers': CORS, 'body': json.dumps({'error': 'Заявка не найдена'})}
+        order = dict(order)
+        if order['status'] != 'open':
+            return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Заявка уже закрыта'})}
+        if order['user_id'] == user['id']:
+            return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Нельзя принять свою заявку'})}
+        tc = order['to_currency']
+        ta = Decimal(str(order['to_amount']))
+        avail = get_rub_balance_ex(conn, user['id']) if tc == 'RUB' else get_crypto_bal(conn, user['id'], tc)
+        if avail < ta:
+            return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': f'Недостаточно {tc}. Доступно: {float(avail):.8g}'})}
+        fc = order['from_currency']
+        fa = Decimal(str(order['from_amount']))
+        # Списываем у taker
+        if tc == 'RUB':
+            deduct_rub(conn, user['id'], ta)
+        else:
+            adjust_crypto(conn, user['id'], tc, -ta)
+        # Зачисляем creator-у (он получает to_currency)
+        if tc == 'RUB':
+            credit_rub(conn, order['user_id'], ta)
+        else:
+            adjust_crypto(conn, order['user_id'], tc, ta)
+        # Зачисляем taker-у (он получает from_currency)
+        if fc == 'RUB':
+            credit_rub(conn, user['id'], fa)
+        else:
+            adjust_crypto(conn, user['id'], fc, fa)
+        with conn.cursor() as cur:
+            cur.execute(
+                f"UPDATE {SCHEMA}.exchange_orders SET status='completed',taker_user_id=%s,completed_at=NOW() WHERE id=%s",
+                (user['id'], oid)
+            )
+        conn.commit()
+        return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True})}
+
+    # ── POST /exchange/cancel ─────────────────────────────────────
+    if http_method == 'POST' and sub == '/cancel':
+        body = json.loads(event.get('body') or '{}')
+        oid = int(body.get('order_id', 0))
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(f"SELECT * FROM {SCHEMA}.exchange_orders WHERE id=%s FOR UPDATE", (oid,))
+            order = cur.fetchone()
+        if not order:
+            return {'statusCode': 404, 'headers': CORS, 'body': json.dumps({'error': 'Заявка не найдена'})}
+        order = dict(order)
+        if order['status'] != 'open':
+            return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Заявка уже закрыта'})}
+        if order['user_id'] != user['id'] and not user.get('is_admin'):
+            return {'statusCode': 403, 'headers': CORS, 'body': json.dumps({'error': 'Нет доступа'})}
+        fc = order['from_currency']
+        fa = Decimal(str(order['from_amount']))
+        if fc == 'RUB':
+            refund_rub(conn, order['user_id'], fa)
+        else:
+            adjust_crypto(conn, order['user_id'], fc, fa)
+        with conn.cursor() as cur:
+            cur.execute(f"UPDATE {SCHEMA}.exchange_orders SET status='cancelled' WHERE id=%s", (oid,))
+        conn.commit()
+        return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True})}
+
+    # ── POST /exchange/admin-deposit ──────────────────────────────
+    if http_method == 'POST' and sub == '/admin-deposit':
+        if not user.get('is_admin'):
+            return {'statusCode': 403, 'headers': CORS, 'body': json.dumps({'error': 'Только для администраторов'})}
+        body = json.loads(event.get('body') or '{}')
+        target_uid = int(body.get('user_id', 0))
+        coin = (body.get('coin') or '').upper()
+        amount = Decimal(str(body.get('amount', 0)))
+        if coin not in COINS:
+            return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': f'Допустимые монеты: {", ".join(COINS)}'})}
+        if amount <= 0:
+            return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Сумма > 0'})}
+        adjust_crypto(conn, target_uid, coin, amount)
+        conn.commit()
+        return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True})}
+
+    return {'statusCode': 404, 'headers': CORS, 'body': json.dumps({'error': 'Маршрут не найден'})}
 
 
 def get_session_user(conn, session_id: str):
@@ -47,6 +306,7 @@ def require_admin(user):
 
 
 def handler(event: dict, context) -> dict:
+    """Профиль, P2P-обменник и Admin API."""
     if event.get('httpMethod') == 'OPTIONS':
         return {'statusCode': 200, 'headers': CORS, 'body': ''}
 
@@ -55,11 +315,18 @@ def handler(event: dict, context) -> dict:
     headers = event.get('headers') or {}
     session_id = headers.get('X-Session-Id', '')
 
-    if not session_id:
-        return {'statusCode': 401, 'headers': CORS, 'body': json.dumps({'error': 'Не авторизован'})}
-
     conn = get_conn()
     try:
+        # ── EXCHANGE ROUTES (публичный GET доступен без сессии) ───
+        if '/exchange' in path:
+            user = None
+            if session_id:
+                user = get_session_user(conn, session_id)
+            return handle_exchange(conn, http_method, path, session_id, event, user)
+
+        if not session_id:
+            return {'statusCode': 401, 'headers': CORS, 'body': json.dumps({'error': 'Не авторизован'})}
+
         user = get_session_user(conn, session_id)
         if not user:
             return {'statusCode': 401, 'headers': CORS, 'body': json.dumps({'error': 'Сессия истекла'})}
