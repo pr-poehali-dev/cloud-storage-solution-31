@@ -84,6 +84,14 @@ def handler(event: dict, context) -> dict:
         if not user:
             return {'statusCode': 401, 'headers': CORS, 'body': json.dumps({'error': 'Не авторизован'})}
 
+        # Маппинг ?action= → path/method
+        qs = event.get('queryStringParameters') or {}
+        action = qs.get('action', '')
+        if action == 'withdraw':
+            path = '/withdraw'; method = 'POST'
+        elif action == 'withdrawals':
+            path = '/withdrawals'; method = 'GET'
+
         # GET /withdrawals — история выводов
         if method == 'GET' and path.endswith('/withdrawals'):
             with conn.cursor() as cur:

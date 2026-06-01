@@ -40,14 +40,14 @@ export async function apiCreatePayment(data: { amount: number; method: 'card' | 
 }
 
 export async function apiWithdraw(data: { amount: number; method: 'bank_card' | 'sbp' | 'crypto'; details: Record<string, string> }) {
-  const res = await fetch(PAYMENT_CREATE_URL + '/withdraw', { method: 'POST', headers: authHeaders(), body: JSON.stringify(data) })
+  const res = await fetch(PAYMENT_CREATE_URL + '?action=withdraw', { method: 'POST', headers: authHeaders(), body: JSON.stringify(data) })
   const json = await res.json()
   if (!res.ok) throw new Error(json.error || 'Ошибка вывода')
   return json as { ok: boolean; withdrawal_id: number; status: string; message?: string }
 }
 
 export async function apiGetWithdrawals() {
-  const res = await fetch(PAYMENT_CREATE_URL + '/withdrawals', { method: 'GET', headers: authHeaders() })
+  const res = await fetch(PAYMENT_CREATE_URL + '?action=withdrawals', { method: 'GET', headers: authHeaders() })
   const json = await res.json()
   if (!res.ok) throw new Error(json.error || 'Ошибка')
   return json as { items: Array<{ id: number; amount: number; method: string; status: string; created_at: string }>; balance: number }
