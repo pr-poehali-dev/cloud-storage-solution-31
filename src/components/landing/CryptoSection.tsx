@@ -57,7 +57,7 @@ export default function CryptoSection({ isActive }: CryptoSectionProps) {
   const isPositive = (selected?.price_change_percentage_24h ?? 0) >= 0
 
   return (
-    <section className="relative h-screen w-full snap-start flex flex-col justify-center p-6 md:p-12 lg:p-16 overflow-hidden rounded-0 py-3 px-3 mx-[5px] my-[5px]">
+    <section className="relative h-screen w-full snap-start flex flex-col justify-center p-6 md:p-12 lg:p-16 overflow-hidden rounded-0 py-3 px-3 mx-0 my-0">
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         animate={isActive ? { opacity: 1, y: 0 } : {}}
