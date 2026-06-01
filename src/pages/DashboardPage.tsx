@@ -5,7 +5,7 @@ import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'rec
 import { Button } from '@/components/ui/button'
 import Icon from '@/components/ui/icon'
 import { useAuth } from '@/context/AuthContext'
-import { apiGetBoosts, apiCreateBoost } from '@/lib/api'
+import { apiGetBoosts, apiCreateBoost, apiGetWheelSpins, type WheelSpin } from '@/lib/api'
 import FortuneWheel from '@/components/FortuneWheel'
 
 const WEEKLY_SECONDS = 7 * 24 * 3600
@@ -63,6 +63,7 @@ export default function DashboardPage() {
   const [boostHistory, setBoostHistory] = useState<BoostItem[]>([])
   const [boostPercent, setBoostPercent] = useState(0)
   const [showWheel, setShowWheel] = useState(false)
+  const [wheelHistory, setWheelHistory] = useState<WheelSpin[]>([])
 
   useEffect(() => {
     if (!loading && !user) navigate('/login')
@@ -91,7 +92,16 @@ export default function DashboardPage() {
     } catch { /* ignore */ }
   }, [])
 
-  useEffect(() => { if (user) loadBoosts() }, [user, loadBoosts])
+  const loadWheelHistory = useCallback(async () => {
+    try {
+      const res = await apiGetWheelSpins()
+      setWheelHistory(res.spins)
+    } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => {
+    if (user) { loadBoosts(); loadWheelHistory() }
+  }, [user, loadBoosts, loadWheelHistory])
 
   const handleBoost = async () => {
     setBoostError('')
@@ -388,6 +398,75 @@ export default function DashboardPage() {
           </motion.div>
         )}
 
+        {/* ── Transaction History ─────────────────────────────── */}
+        {(wheelHistory.length > 0 || boostHistory.length > 0) && (
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}
+            className="bg-white/3 border border-white/8 rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
+              <div className="flex items-center gap-2">
+                <Icon name="ClockArrowDown" size={16} className="text-neutral-400" />
+                <p className="text-white font-semibold text-sm">История транзакций</p>
+              </div>
+              <span className="text-neutral-600 text-xs">{wheelHistory.length + boostHistory.length} записей</span>
+            </div>
+            <div className="divide-y divide-white/5">
+              {[
+                ...wheelHistory.map(s => ({
+                  id: `w${s.id}`,
+                  type: 'wheel' as const,
+                  date: s.created_at,
+                  amount: s.multiplier > 0 ? s.bet * s.multiplier : -s.bet,
+                  label: s.multiplier > 0 ? `Колесо фортуны — ${s.segment}` : 'Колесо фортуны — Проигрыш',
+                  sub: `Ставка ${s.bet.toLocaleString('ru-RU')} ₽`,
+                  win: s.multiplier > 0,
+                  icon: s.multiplier > 0 ? 'Trophy' : 'Dices',
+                  color: s.multiplier > 0 ? 'text-green-400' : 'text-red-400',
+                  iconBg: s.multiplier > 0 ? 'bg-green-500/15' : 'bg-red-500/10',
+                  iconColor: s.multiplier > 0 ? 'text-green-400' : 'text-red-500',
+                  badge: s.multiplier > 0 ? { text: `×${s.multiplier}`, style: 'bg-green-500/15 border-green-500/25 text-green-400' } : null,
+                })),
+                ...boostHistory.map(b => ({
+                  id: `b${b.id}`,
+                  type: 'boost' as const,
+                  date: b.created_at,
+                  amount: -b.amount,
+                  label: 'Буст аккаунта',
+                  sub: `+${b.bonus_pct}% к ставке`,
+                  win: false,
+                  icon: 'Zap',
+                  color: 'text-yellow-400',
+                  iconBg: 'bg-yellow-500/10',
+                  iconColor: 'text-yellow-400',
+                  badge: { text: `+${b.bonus_pct}%`, style: 'bg-yellow-500/15 border-yellow-500/25 text-yellow-400' },
+                })),
+              ]
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                .slice(0, 10)
+                .map(tx => (
+                  <div key={tx.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-white/3 transition-colors">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${tx.iconBg}`}>
+                      <Icon name={tx.icon as Parameters<typeof Icon>[0]['name']} size={15} className={tx.iconColor} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-medium truncate">{tx.label}</p>
+                      <p className="text-neutral-600 text-xs mt-0.5">{tx.sub} · {new Date(tx.date).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {tx.badge && (
+                        <span className={`text-[11px] border rounded-full px-2 py-0.5 font-bold ${tx.badge.style}`}>
+                          {tx.badge.text}
+                        </span>
+                      )}
+                      <p className={`text-sm font-bold tabular-nums ${tx.color}`}>
+                        {tx.amount >= 0 ? '+' : ''}{tx.amount.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ₽
+                      </p>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </motion.div>
+        )}
+
         {/* ── Referral ───────────────────────────────────────── */}
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}
           className="bg-gradient-to-br from-purple-900/20 via-blue-900/10 to-transparent border border-purple-500/20 rounded-2xl p-5">
@@ -537,7 +616,7 @@ export default function DashboardPage() {
               <FortuneWheel
                 balance={balance}
                 onClose={() => setShowWheel(false)}
-                onResult={() => refresh()}
+                onResult={() => { refresh(); loadWheelHistory() }}
               />
             </motion.div>
           </motion.div>
