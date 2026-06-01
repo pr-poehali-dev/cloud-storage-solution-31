@@ -134,46 +134,12 @@ def handler(event: dict, context) -> dict:
                 withdrawal_id = cur.fetchone()[0]
                 conn.commit()
 
-            # Автовывод для карты и СБП через ЮKassa Payouts
-            if w_method in ('bank_card', 'sbp'):
-                try:
-                    payout_method = {}
-                    if w_method == 'sbp':
-                        payout_method = {'type': 'sbp', 'phone': details.get('phone', '')}
-                    else:
-                        payout_method = {'type': 'bank_card', 'card': {'number': details.get('card_number', '')}}
-
-                    payout = yk_request('POST', '/payouts', {
-                        'amount': {'value': f'{amount:.2f}', 'currency': 'RUB'},
-                        'payout_destination_data': payout_method,
-                        'description': f'Вывод дивидендов — {user["name"]}',
-                        'metadata': {'withdrawal_id': str(withdrawal_id)},
-                    })
-
-                    payout_id = payout.get('id')
-                    payout_status = payout.get('status', 'pending')
-                    new_status = 'completed' if payout_status == 'succeeded' else 'pending'
-
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            "UPDATE withdrawals SET external_id = %s, status = %s, processed_at = CASE WHEN %s = 'completed' THEN NOW() ELSE NULL END WHERE id = %s",
-                            (payout_id, new_status, new_status, withdrawal_id)
-                        )
-                        conn.commit()
-
-                    return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True, 'withdrawal_id': withdrawal_id, 'status': new_status})}
-
-                except urllib.error.HTTPError as e:
-                    err_body = e.read().decode()
-                    with conn.cursor() as cur:
-                        cur.execute("UPDATE withdrawals SET status = 'failed' WHERE id = %s", (withdrawal_id,))
-                        conn.commit()
-                    return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': f'Ошибка выплаты ЮKassa: {err_body}'})}
-
-            # Крипто — ручная обработка (статус pending)
+            # Все выводы — ручная обработка администратором
+            method_labels = {'bank_card': 'на банковскую карту', 'sbp': 'через СБП', 'crypto': 'на крипто-кошелёк'}
+            label = method_labels.get(w_method, w_method)
             return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({
                 'ok': True, 'withdrawal_id': withdrawal_id, 'status': 'pending',
-                'message': 'Запрос принят. Выплата на крипто-кошелёк будет обработана в течение 24 часов.'
+                'message': f'Заявка на вывод {label} принята! Обрабатывается администратором в течение 24 часов.'
             })}
 
         # POST / — создать платёж на пополнение
