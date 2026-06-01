@@ -18,9 +18,75 @@ POST /admin/users/toggle-admin
 """
 import json
 import os
+import random
+import string
+import hashlib
+import time as _time
 from decimal import Decimal, InvalidOperation
 import psycopg2
 from psycopg2.extras import RealDictCursor
+
+# ── Bot data ───────────────────────────────────────────────────────────────────
+BOT_NAMES = [
+    '0x3f8a','0x7c2d','0xb19e','0x4fa1','0x92c3','0xe85b','0x1d74','0x6a0f',
+    '0xc53e','0x2891','0xd47a','0x0b6c','0x5f32','0x8e9d','0xa145','0x3c7b',
+]
+BOT_RATES = {
+    ('RUB','USDT'): 92.5, ('USDT','RUB'): 91.8, ('RUB','BTC'): 8_200_000,
+    ('BTC','RUB'): 8_150_000, ('RUB','ETH'): 340_000, ('ETH','RUB'): 338_000,
+    ('USDT','BTC'): 88_500, ('BTC','USDT'): 88_200, ('USDT','ETH'): 3_650,
+    ('ETH','USDT'): 3_630, ('BNB','USDT'): 605, ('USDT','BNB'): 0.00165,
+    ('USDT','USDC'): 0.9998, ('USDC','USDT'): 1.0002,
+}
+
+def _gen_hash():
+    raw = str(random.random()) + str(_time.time())
+    return '0x' + hashlib.sha256(raw.encode()).hexdigest()[:62]
+
+def _bot_addr():
+    return random.choice(BOT_NAMES) + ''.join(random.choices(string.hexdigits[:16], k=4))
+
+def _rand_amount(cur: str) -> float:
+    ranges = {
+        'RUB':  (1_000, 150_000), 'USDT': (10, 1_500), 'BTC': (0.0005, 0.05),
+        'ETH':  (0.01, 2.0),      'BNB':  (0.1, 20),   'USDC': (10, 1_500),
+    }
+    lo, hi = ranges.get(cur, (1, 100))
+    return round(random.uniform(lo, hi), 6)
+
+def _ensure_bot_txs(conn, min_count: int = 30):
+    """Генерирует бот-транзакции если лента пуста или устарела."""
+    with conn.cursor() as cur:
+        cur.execute(
+            f"SELECT COUNT(*) FROM {SCHEMA}.tx_feed WHERE created_at > NOW() - INTERVAL '2 hours'"
+        )
+        cnt = cur.fetchone()[0]
+    if cnt >= min_count:
+        return
+    # Генерируем пачку транзакций с разбросом по времени
+    pairs = list(BOT_RATES.keys())
+    rows = []
+    for i in range(40):
+        fc, tc = random.choice(pairs)
+        fa = _rand_amount(fc)
+        rate = BOT_RATES[(fc, tc)] * random.uniform(0.995, 1.005)
+        ta = round(fa * rate, 6) if tc != 'BTC' else round(fa / BOT_RATES.get((tc, fc), 1), 6)
+        if tc == 'BTC' and fc == 'USDT':
+            ta = round(fa / rate, 6)
+        secs_ago = random.randint(0, 7000)
+        rows.append((
+            _gen_hash(), _bot_addr(), _bot_addr(),
+            fc, tc, fa, ta,
+            f"NOW() - INTERVAL '{secs_ago} seconds'"
+        ))
+    with conn.cursor() as cur:
+        for r in rows:
+            cur.execute(
+                f"INSERT INTO {SCHEMA}.tx_feed (tx_hash,from_addr,to_addr,from_cur,to_cur,from_amount,to_amount,created_at) "
+                f"VALUES (%s,%s,%s,%s,%s,%s,%s,{r[7]})",
+                r[:7]
+            )
+    conn.commit()
 
 CORS = {
     'Access-Control-Allow-Origin': '*',
@@ -120,6 +186,8 @@ def handle_exchange(conn, http_method, path, session_id, event, user):
         'exchange-take': '/take', 'exchange-cancel': '/cancel',
         'exchange-admin-deposit': '/admin-deposit',
         'exchange-admin-balances': '/admin-balances',
+        'exchange-txfeed': '/txfeed',
+        'exchange-stats': '/stats',
     }
     if action in ACTION_MAP:
         sub = ACTION_MAP[action]
@@ -129,6 +197,55 @@ def handle_exchange(conn, http_method, path, session_id, event, user):
         sub = path[len('/exchange'):] or '/'
     else:
         sub = '/'
+
+    # ── GET /exchange/txfeed — живая лента транзакций ─────────────
+    if http_method == 'GET' and sub == '/txfeed':
+        _ensure_bot_txs(conn)
+        qs2 = event.get('queryStringParameters') or {}
+        limit = min(int(qs2.get('limit', 40)), 100)
+        after_id = qs2.get('after_id')  # для polling новых
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            if after_id:
+                cur.execute(
+                    f"SELECT id,tx_hash,from_addr,to_addr,from_cur,to_cur,from_amount,to_amount,status,is_bot,created_at "
+                    f"FROM {SCHEMA}.tx_feed WHERE id > %s ORDER BY id DESC LIMIT %s",
+                    (int(after_id), limit)
+                )
+            else:
+                cur.execute(
+                    f"SELECT id,tx_hash,from_addr,to_addr,from_cur,to_cur,from_amount,to_amount,status,is_bot,created_at "
+                    f"FROM {SCHEMA}.tx_feed ORDER BY id DESC LIMIT %s",
+                    (limit,)
+                )
+            rows = cur.fetchall()
+        txs = [{
+            'id': r['id'], 'tx_hash': r['tx_hash'],
+            'from_addr': r['from_addr'], 'to_addr': r['to_addr'],
+            'from_cur': r['from_cur'], 'to_cur': r['to_cur'],
+            'from_amount': float(r['from_amount']), 'to_amount': float(r['to_amount']),
+            'status': r['status'], 'is_bot': r['is_bot'],
+            'created_at': str(r['created_at'])
+        } for r in rows]
+        return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'txs': txs})}
+
+    # ── GET /exchange/stats — общая статистика ────────────────────
+    if http_method == 'GET' and sub == '/stats':
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.tx_feed")
+            total_tx = int(cur.fetchone()[0])
+            cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.exchange_orders WHERE status='completed'")
+            p2p_done = int(cur.fetchone()[0])
+            cur.execute(
+                f"SELECT SUM(from_amount) FROM {SCHEMA}.tx_feed WHERE from_cur='USDT'"
+            )
+            vol = cur.fetchone()[0]
+            volume_usdt = float(vol) if vol else 0.0
+            cur.execute(f"SELECT COUNT(DISTINCT from_addr) FROM {SCHEMA}.tx_feed")
+            wallets = int(cur.fetchone()[0])
+        return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({
+            'total_tx': total_tx, 'p2p_done': p2p_done,
+            'volume_usdt': volume_usdt, 'active_wallets': wallets
+        })}
 
     # ── GET /exchange — публичный список заявок ───────────────────
     if http_method == 'GET' and sub == '/':
@@ -222,6 +339,13 @@ def handle_exchange(conn, http_method, path, session_id, event, user):
                 (user['id'], fc, float(fa), tc, float(ta), float(rate), comment)
             )
             order_id = cur.fetchone()[0]
+        # Записываем в live-ленту
+        with conn.cursor() as cur:
+            cur.execute(
+                f"INSERT INTO {SCHEMA}.tx_feed (tx_hash,from_addr,to_addr,from_cur,to_cur,from_amount,to_amount,is_bot,user_id,status) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,false,%s,'pending')",
+                (_gen_hash(), f"0x{user['id']:06x}user", _bot_addr(), fc, tc, float(fa), float(ta), user['id'])
+            )
         conn.commit()
         return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True, 'order_id': order_id})}
 

@@ -67,6 +67,28 @@ export async function apiCreateBoost(amount: number) {
   return json as { ok: boolean; boost_id: number; bonus_pct: number }
 }
 
+export type TxFeedItem = {
+  id: number; tx_hash: string; from_addr: string; to_addr: string
+  from_cur: string; to_cur: string; from_amount: number; to_amount: number
+  status: string; is_bot: boolean; created_at: string
+}
+
+export async function apiTxFeed(afterId?: number) {
+  const p = new URLSearchParams({ action: 'exchange-txfeed', limit: '40' })
+  if (afterId) p.set('after_id', String(afterId))
+  const res = await fetch(PROFILE_URL + '?' + p.toString(), { headers: { 'X-Session-Id': getSession() } })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || 'Ошибка')
+  return json as { txs: TxFeedItem[] }
+}
+
+export async function apiExchangeStats() {
+  const res = await fetch(PROFILE_URL + '?action=exchange-stats', { headers: { 'X-Session-Id': getSession() } })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || 'Ошибка')
+  return json as { total_tx: number; p2p_done: number; volume_usdt: number; active_wallets: number }
+}
+
 // ── Wheel API ──────────────────────────────────────────────────
 
 export type WheelSegment = { label: string; mult: number; color: string }
