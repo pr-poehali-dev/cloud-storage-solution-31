@@ -500,6 +500,67 @@ def handler(event: dict, context) -> dict:
 
             return {'statusCode': 404, 'headers': CORS, 'body': json.dumps({'error': 'Not found'})}
 
+        # ── BOOST ROUTES ──────────────────────────────────────────
+        if '/boost' in path:
+            # GET /boost — история бустов пользователя
+            if http_method == 'GET':
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT id, amount, bonus_pct, created_at FROM boosts "
+                        "WHERE user_id=%s ORDER BY created_at DESC LIMIT 20",
+                        (user['id'],)
+                    )
+                    rows = cur.fetchall()
+                    cur.execute("SELECT boost_percent FROM users WHERE id=%s", (user['id'],))
+                    bp = cur.fetchone()
+                boosts = [{'id': r[0], 'amount': float(r[1]), 'bonus_pct': float(r[2]), 'created_at': str(r[3])} for r in rows]
+                return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({
+                    'boosts': boosts, 'boost_percent': float(bp[0]) if bp else 0
+                })}
+
+            # POST /boost — создать буст
+            if http_method == 'POST':
+                import json as _json
+                body = _json.loads(event.get('body') or '{}')
+                amount = float(body.get('amount', 0))
+                if amount < 5000:
+                    return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Минимальная сумма буста — 5 000 ₽'})}
+                bonus_pct = 10.0 if amount >= 100000 else 5.0
+                with conn.cursor() as cur:
+                    # Проверяем баланс
+                    cur.execute(
+                        "SELECT COALESCE(SUM(d.amount),0) FROM deposits d WHERE d.user_id=%s AND d.status='confirmed'",
+                        (user['id'],)
+                    )
+                    dep = float(cur.fetchone()[0])
+                    cur.execute("SELECT COALESCE(SUM(dv.amount),0) FROM dividends dv WHERE dv.user_id=%s", (user['id'],))
+                    divs = float(cur.fetchone()[0])
+                    cur.execute("SELECT COALESCE(SUM(rp.amount),0) FROM referral_payouts rp WHERE rp.referrer_id=%s", (user['id'],))
+                    refs = float(cur.fetchone()[0])
+                    cur.execute("SELECT COALESCE(SUM(w.amount),0) FROM withdrawals w WHERE w.user_id=%s AND w.status IN ('pending','completed')", (user['id'],))
+                    withdrawn = float(cur.fetchone()[0])
+                    available = divs + refs - withdrawn
+                    if available < amount:
+                        return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': f'Недостаточно средств. Доступно: {available:.2f} ₽'})}
+                    # Списываем через вывод-запись
+                    cur.execute(
+                        "INSERT INTO withdrawals (user_id, amount, method, status) VALUES (%s, %s, 'boost', 'completed')",
+                        (user['id'], amount)
+                    )
+                    # Записываем буст
+                    cur.execute(
+                        "INSERT INTO boosts (user_id, amount, bonus_pct) VALUES (%s, %s, %s) RETURNING id",
+                        (user['id'], amount, bonus_pct)
+                    )
+                    boost_id = cur.fetchone()[0]
+                    # Обновляем boost_percent (берём максимум всех бустов)
+                    cur.execute(
+                        "UPDATE users SET boost_percent = (SELECT COALESCE(SUM(b.bonus_pct),0) FROM boosts b WHERE b.user_id=%s) WHERE id=%s",
+                        (user['id'], user['id'])
+                    )
+                    conn.commit()
+                return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True, 'boost_id': boost_id, 'bonus_pct': bonus_pct})}
+
         # ── PROFILE ROUTE ─────────────────────────────────────────
         with conn.cursor() as cur:
             cur.execute(
@@ -523,13 +584,18 @@ def handler(event: dict, context) -> dict:
             )
             withdrawn = float(cur.fetchone()[0])
 
-        rate = 15 if deposit > 100000 else 10
+            cur.execute("SELECT boost_percent FROM users WHERE id=%s", (user['id'],))
+            bp_row = cur.fetchone()
+            boost_percent = float(bp_row[0]) if bp_row else 0.0
+
+        base_rate = 15 if deposit > 100000 else 10
+        rate = base_rate + boost_percent
         balance = dividends_total + referral_total - withdrawn
 
         user.update({
             'deposit': deposit, 'dividends_total': dividends_total,
             'referral_total': referral_total, 'referral_count': referral_count,
-            'balance': balance, 'rate': rate
+            'balance': balance, 'rate': rate, 'boost_percent': boost_percent
         })
         return {'statusCode': 200, 'headers': CORS, 'body': json.dumps(user)}
     finally:

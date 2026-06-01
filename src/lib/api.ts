@@ -53,6 +53,20 @@ export async function apiGetWithdrawals() {
   return json as { items: Array<{ id: number; amount: number; method: string; status: string; created_at: string }>; balance: number }
 }
 
+export async function apiGetBoosts() {
+  const res = await fetch(PROFILE_URL + '/boost', { headers: authHeaders() })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || 'Ошибка')
+  return json as { boosts: Array<{ id: number; amount: number; bonus_pct: number; created_at: string }>; boost_percent: number }
+}
+
+export async function apiCreateBoost(amount: number) {
+  const res = await fetch(PROFILE_URL + '/boost', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ amount }) })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || 'Ошибка')
+  return json as { ok: boolean; boost_id: number; bonus_pct: number }
+}
+
 // ── Admin API ──────────────────────────────────────────────────
 
 export async function apiAdminUsers() {
