@@ -5,14 +5,27 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import Icon from '@/components/ui/icon'
 import { useAuth } from '@/context/AuthContext'
+import { Input } from '@/components/ui/input'
 import {
   apiAdminUsers, apiAdminDeposits, apiAdminWithdrawals,
   apiAdminApproveWithdrawal, apiAdminRejectWithdrawal,
   apiAdminConfirmDeposit, apiAdminToggleAdmin,
-  type AdminUser, type AdminDeposit, type AdminWithdrawal
+  apiAdminDepositCrypto, apiAdminExchangeOrders, apiExchangeCancel,
+  type AdminUser, type AdminDeposit, type AdminWithdrawal, type ExchangeOrder
 } from '@/lib/api'
 
-type Tab = 'users' | 'deposits' | 'withdrawals'
+type Tab = 'users' | 'deposits' | 'withdrawals' | 'exchange'
+
+const COINS = ['USDT', 'BTC', 'ETH', 'BNB', 'USDC']
+const COIN_COLORS: Record<string, string> = {
+  RUB: 'text-green-400', USDT: 'text-emerald-400', BTC: 'text-orange-400',
+  ETH: 'text-blue-400', BNB: 'text-yellow-400', USDC: 'text-sky-400',
+}
+const STATUS_EXCH: Record<string, string> = {
+  open: 'bg-green-500/10 text-green-400 border-green-500/20',
+  completed: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  cancelled: 'bg-white/5 text-neutral-500 border-white/10',
+}
 
 const STATUS_BADGE: Record<string, string> = {
   pending: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
@@ -39,10 +52,17 @@ export default function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [deposits, setDeposits] = useState<AdminDeposit[]>([])
   const [withdrawals, setWithdrawals] = useState<AdminWithdrawal[]>([])
+  const [exchOrders, setExchOrders] = useState<ExchangeOrder[]>([])
   const [fetching, setFetching] = useState(false)
   const [actionId, setActionId] = useState<number | null>(null)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
+  // Форма зачисления крипты
+  const [depUserId, setDepUserId] = useState('')
+  const [depCoin, setDepCoin] = useState('USDT')
+  const [depAmount, setDepAmount] = useState('')
+  const [depLoading, setDepLoading] = useState(false)
+  const [depMsg, setDepMsg] = useState('')
 
   useEffect(() => {
     if (!loading && (!user || !user.is_admin)) navigate('/')
@@ -54,6 +74,7 @@ export default function AdminPage() {
     try {
       if (t === 'users') { const r = await apiAdminUsers(); setUsers(r.users) }
       else if (t === 'deposits') { const r = await apiAdminDeposits(); setDeposits(r.items) }
+      else if (t === 'exchange') { const r = await apiAdminExchangeOrders(); setExchOrders(r.orders) }
       else { const r = await apiAdminWithdrawals(); setWithdrawals(r.items) }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Ошибка загрузки')
@@ -75,6 +96,7 @@ export default function AdminPage() {
     { key: 'withdrawals', label: 'Выводы', icon: 'ArrowUpRight' },
     { key: 'deposits', label: 'Депозиты', icon: 'ArrowDownLeft' },
     { key: 'users', label: 'Пользователи', icon: 'Users' },
+    { key: 'exchange', label: 'Обменник', icon: 'ArrowLeftRight' },
   ]
 
   const pendingW = withdrawals.filter(w => w.status === 'pending').length
@@ -309,6 +331,107 @@ export default function AdminPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {/* EXCHANGE */}
+            {tab === 'exchange' && (
+              <div className="space-y-6">
+                {/* Зачислить крипту */}
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+                  <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+                    <Icon name="PlusCircle" size={16} className="text-[#FF4D00]" />
+                    Зачислить крипту пользователю
+                  </h3>
+                  <div className="flex flex-wrap gap-3 items-end">
+                    <div>
+                      <p className="text-neutral-400 text-xs mb-1.5">ID пользователя</p>
+                      <Input value={depUserId} onChange={e => setDepUserId(e.target.value)}
+                        placeholder="12" type="number"
+                        className="bg-white/5 border-white/20 text-white placeholder:text-neutral-600 focus:border-[#FF4D00] h-9 w-28" />
+                    </div>
+                    <div>
+                      <p className="text-neutral-400 text-xs mb-1.5">Монета</p>
+                      <select value={depCoin} onChange={e => setDepCoin(e.target.value)}
+                        className="bg-white/5 border border-white/20 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-[#FF4D00] h-9">
+                        {COINS.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <p className="text-neutral-400 text-xs mb-1.5">Сумма</p>
+                      <Input value={depAmount} onChange={e => setDepAmount(e.target.value)}
+                        placeholder="100" type="number" step="any"
+                        className="bg-white/5 border-white/20 text-white placeholder:text-neutral-600 focus:border-[#FF4D00] h-9 w-32" />
+                    </div>
+                    <Button size="sm" disabled={depLoading}
+                      className="bg-[#FF4D00] hover:bg-[#e64500] text-white border-0 h-9"
+                      onClick={async () => {
+                        setDepMsg('')
+                        setDepLoading(true)
+                        try {
+                          await apiAdminDepositCrypto({ user_id: Number(depUserId), coin: depCoin, amount: Number(depAmount) })
+                          setDepMsg('✓ Зачислено')
+                          setDepUserId(''); setDepAmount('')
+                        } catch (e: unknown) {
+                          setDepMsg(e instanceof Error ? e.message : 'Ошибка')
+                        } finally { setDepLoading(false) }
+                      }}>
+                      {depLoading ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Зачислить'}
+                    </Button>
+                    {depMsg && <p className={`text-sm ${depMsg.startsWith('✓') ? 'text-green-400' : 'text-red-400'}`}>{depMsg}</p>}
+                  </div>
+                </div>
+
+                {/* Таблица заявок */}
+                <div className="overflow-x-auto rounded-2xl border border-white/10">
+                  <table className="w-full text-sm">
+                    <thead className="bg-white/5 text-neutral-400">
+                      <tr>
+                        {['ID', 'Создатель', 'Отдаёт', 'Получает', 'Курс', 'Статус', 'Покупатель', 'Дата', 'Действие'].map(h => (
+                          <th key={h} className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {exchOrders.length === 0 && (
+                        <tr><td colSpan={9} className="px-4 py-8 text-center text-neutral-500">Нет заявок</td></tr>
+                      )}
+                      {exchOrders.map(o => (
+                        <tr key={o.id} className="hover:bg-white/3 transition-colors">
+                          <td className="px-4 py-3 text-neutral-500">#{o.id}</td>
+                          <td className="px-4 py-3 text-white text-xs">{o.creator_name}<br/><span className="text-neutral-500">#{o.user_id}</span></td>
+                          <td className="px-4 py-3">
+                            <span className={`font-semibold ${COIN_COLORS[o.from_currency] || 'text-white'}`}>
+                              {o.from_amount} {o.from_currency}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`font-semibold ${COIN_COLORS[o.to_currency] || 'text-white'}`}>
+                              {o.to_amount} {o.to_currency}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-neutral-400 text-xs font-mono">{Number(o.rate).toFixed(4)}</td>
+                          <td className="px-4 py-3">
+                            <span className={`text-xs border rounded-full px-2.5 py-0.5 ${STATUS_EXCH[o.status] || 'text-neutral-400'}`}>
+                              {o.status === 'open' ? 'Открыта' : o.status === 'completed' ? 'Выполнена' : 'Отменена'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-neutral-400 text-xs">{o.taker_name || '—'}</td>
+                          <td className="px-4 py-3 text-neutral-500 text-xs whitespace-nowrap">{fmtDate(o.created_at)}</td>
+                          <td className="px-4 py-3">
+                            {o.status === 'open' && (
+                              <Button size="sm" variant="outline" disabled={actionId === o.id}
+                                className="border-red-500/30 text-red-400 hover:bg-red-500/10 bg-transparent h-7 px-2.5 text-xs"
+                                onClick={() => { setActionId(o.id); action(() => apiExchangeCancel(o.id)) }}>
+                                <Icon name="X" size={12} className="mr-1" /> Отменить
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 

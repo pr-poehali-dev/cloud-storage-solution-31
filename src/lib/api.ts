@@ -197,3 +197,17 @@ export async function apiExchangeCancel(order_id: number) {
   if (!res.ok) throw new Error(json.error || 'Ошибка')
   return json as { ok: boolean }
 }
+
+export async function apiAdminDepositCrypto(data: { user_id: number; coin: string; amount: number }) {
+  const res = await fetch(PROFILE_URL + '/exchange/admin-deposit', { method: 'POST', headers: authHeaders(), body: JSON.stringify(data) })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || 'Ошибка')
+  return json as { ok: boolean }
+}
+
+export async function apiAdminExchangeOrders() {
+  const res = await fetch(PROFILE_URL + '/exchange?limit=200', { headers: authHeaders() })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || 'Ошибка')
+  return json as { orders: ExchangeOrder[] }
+}
